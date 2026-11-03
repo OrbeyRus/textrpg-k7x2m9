@@ -6,15 +6,36 @@
 
 ```powershell
 cd C:\TextRPG
-uvicorn main:app --port 8001 --reload
+python start.py
 ```
 
-Или двойным кликом по `Start Server.cmd`. Игра: http://127.0.0.1:8001
+`start.py` поднимает сервер на http://127.0.0.1:8001 и, дождавшись готовности,
+сам открывает игру в новом окне браузера. Остановить сервер — `Ctrl+C`.
+
+Полезные флаги:
+
+```powershell
+python start.py --port 8002     # другой порт
+python start.py --no-browser    # сервер без автооткрытия браузера
+```
+
+Вручную (без автооткрытия):
+
+```powershell
+cd C:\TextRPG
+python -m uvicorn main:app --port 8001 --host 127.0.0.1
+```
+
+Игра: http://127.0.0.1:8001
+
+Двойной клик по `Start Server.cmd` делает то же самое (запускает `start.py` и
+открывает игру в новом окне браузера).
 
 ## Структура
 
 ```
 main.py                  точка входа FastAPI
+start.py                 запуск сервера + автооткрытие игры
 index.html               интерфейс
 app/
   config.py              пути и настройки из .env
