@@ -17,8 +17,8 @@ android {
         applicationId = "com.textrpg.app"
         minSdk = 24
         // targetSdk в AGP 9 по умолчанию равен compileSdk — не задаём явно.
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         ndk {
             // arm64-v8a — обычные современные телефоны,
@@ -44,6 +44,11 @@ android {
 
     // jvmTarget для Kotlin наследуется от targetCompatibility (17),
     // поэтому устаревший блок kotlinOptions здесь не нужен.
+}
+
+dependencies {
+    // FileProvider нужен, чтобы установщик Android принял скачанный APK.
+    implementation("androidx.core:core-ktx:1.13.1")
 }
 
 // Python-пакеты, вкомпилированные в APK.

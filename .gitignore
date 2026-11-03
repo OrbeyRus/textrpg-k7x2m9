@@ -16,6 +16,7 @@ data/book_index.json
 data/debug.log
 data/source/*.txt
 data/logs/
+data/settings.json
 
 # Старые бэкапы и ярлыки
 *.7z

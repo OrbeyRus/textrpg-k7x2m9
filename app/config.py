@@ -61,6 +61,10 @@ EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 # Отладочные логи (RAG, разбор тегов и т.п.) в консоль сервера.
 DEBUG = os.getenv("DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
 
+# Версия игры. На ПК совпадает с Android-версией из build.gradle.kts.
+# Используется при проверке обновлений на GitHub.
+APP_VERSION = os.getenv("TEXTRPG_VERSION", "1.1.0")
+
 # Каталоги нужны ещё до подключения к базе.
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 BOOKS_DIR.mkdir(parents=True, exist_ok=True)

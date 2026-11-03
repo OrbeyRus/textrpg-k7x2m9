@@ -1,27 +1,45 @@
-"""HTTP-клиент для LLM."""
+"""HTTP-клиент для LLM.
+
+Адрес, ключ и модель берутся из настроек (``settings_store``), поэтому
+пользователь может переключить бесплатного провайдера прямо в игре.
+"""
 
 import time
 
 import requests
 
-from app.config import LLM_MODEL, PROXYAPI_KEY
+from app.services import settings_store
 
-API_URL = "https://api.proxyapi.ru/v1/chat/completions"
 REQUEST_TIMEOUT = 90     # модель отвечает не мгновенно: 40с не хватало
 MAX_ATTEMPTS = 3         # повторы на сетевых ошибках и таймаутах
 RETRY_DELAY = 1.5        # пауза между попытками, сек
 
 
-def call_llm(prompt: str, max_tokens: int = 800) -> str:
-    if not PROXYAPI_KEY:
-        raise Exception("PROXYAPI_KEY не задан. Добавьте ключ в .env")
-
+def _headers(config: dict) -> dict:
     headers = {
-        "Authorization": f"Bearer {PROXYAPI_KEY}",
+        "Authorization": f"Bearer {config['key']}",
         "Content-Type": "application/json",
     }
+    # OpenRouter просит указывать источник — так запросы из игры видно в кабинете.
+    if config["provider"] == "openrouter":
+        headers["HTTP-Referer"] = "https://github.com/textrpg"
+        headers["X-Title"] = "Text RPG"
+    return headers
+
+
+def call_llm(prompt: str, max_tokens: int = 800) -> str:
+    config = settings_store.llm_config()
+    if not config["key"]:
+        raise Exception(
+            "Не задан ключ ИИ. Откройте меню → «Ключ ИИ» и выберите провайдера."
+        )
+    if not config["base_url"]:
+        raise Exception(
+            "Не задан адрес провайдера ИИ. Откройте меню → «Ключ ИИ»."
+        )
+
     data = {
-        "model": LLM_MODEL,
+        "model": config["model"],
         "messages": [
             {
                 "role": "system",
@@ -37,7 +55,10 @@ def call_llm(prompt: str, max_tokens: int = 800) -> str:
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             response = requests.post(
-                API_URL, headers=headers, json=data, timeout=REQUEST_TIMEOUT
+                config["base_url"],
+                headers=_headers(config),
+                json=data,
+                timeout=REQUEST_TIMEOUT,
             )
             if response.status_code != 200:
                 raise Exception(f"Ошибка {response.status_code}: {response.text}")

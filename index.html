@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/static/fonts/fonts.css?v=1">
     <link rel="stylesheet" href="/static/css/base.css?v=7">
     <link rel="stylesheet" href="/static/css/layout.css?v=5">
-    <link rel="stylesheet" href="/static/css/components.css?v=11">
+    <link rel="stylesheet" href="/static/css/components.css?v=12">
 </head>
 <body>
 
@@ -87,7 +87,18 @@
         <main class="center-panel">
             <div class="top-bar">
                 <h1>Мир приключений</h1>
-                <button class="btn-reset" onclick="resetGame()">Сброс</button>
+                <div class="top-bar-actions">
+                    <button class="btn-menu" onclick="openMenu()">☰ Меню</button>
+                    <button class="btn-reset" onclick="resetGame()">Сброс</button>
+                </div>
+            </div>
+
+            <div id="update-banner" class="update-banner" style="display:none;">
+                <span id="update-banner-text"></span>
+                <span class="update-banner-actions">
+                    <button class="btn-mini" id="update-banner-action" onclick="bannerPrimary()">Обновить</button>
+                    <button class="btn-mini btn-mini-ghost" onclick="dismissUpdate()">Позже</button>
+                </span>
             </div>
 
             <div class="bars-panel">
@@ -171,6 +182,100 @@
         </div>
     </div>
 
+    <!-- МЕНЮ: настройки и служебные действия -->
+    <div id="menu-modal" class="overlay menu-overlay" style="display: none;">
+        <div class="menu-card">
+            <div class="menu-head">
+                <h2 id="menu-title">Меню</h2>
+                <button class="icon-btn" onclick="closeMenu()" aria-label="Закрыть">&times;</button>
+            </div>
+
+            <!-- Главный список -->
+            <div id="menu-home" class="menu-body">
+                <button class="menu-row" onclick="openMenuSection('llm')">
+                    <span>Ключ ИИ</span><small id="menu-llm-summary">не задан</small>
+                </button>
+                <button class="menu-row" onclick="openMenuSection('sound')">
+                    <span>Настройки звука</span><small id="menu-sound-summary">—</small>
+                </button>
+                <button class="menu-row" onclick="openMenuSection('update')">
+                    <span>Обновления</span><small id="menu-update-summary">—</small>
+                </button>
+                <button class="menu-row" onclick="saveLogFile()">
+                    <span>Сохранить лог файл</span><small>история и журнал</small>
+                </button>
+                <button class="menu-row menu-row-danger" onclick="exitApp()">
+                    <span>Выйти</span><small>закрыть игру</small>
+                </button>
+            </div>
+
+            <!-- Ключ ИИ -->
+            <div id="menu-llm" class="menu-body" style="display: none;">
+                <button class="menu-back" onclick="openMenuSection('home')">← Назад</button>
+                <p class="menu-hint">Выберите провайдера и вставьте свой бесплатный ключ. Ключ хранится только на этом устройстве.</p>
+                <div id="provider-list" class="provider-list"></div>
+
+                <div class="field-group">
+                    <label class="field-label" for="llm-model">Модель</label>
+                    <input type="text" id="llm-model" class="text-input" list="llm-models" placeholder="название модели">
+                    <datalist id="llm-models"></datalist>
+                </div>
+
+                <div class="field-group" id="llm-base-row" style="display: none;">
+                    <label class="field-label" for="llm-base">Адрес сервера (chat completions)</label>
+                    <input type="text" id="llm-base" class="text-input" placeholder="https://…/v1/chat/completions">
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label" for="llm-key">Ключ API</label>
+                    <input type="password" id="llm-key" class="text-input" autocomplete="off" placeholder="оставьте пустым, чтобы не менять">
+                </div>
+
+                <div class="menu-actions">
+                    <button class="btn-action" onclick="saveLlmSettings()">Сохранить</button>
+                    <button class="btn-action btn-ghost" onclick="testLlmSettings()">Проверить</button>
+                </div>
+                <div id="llm-status" class="menu-status"></div>
+            </div>
+
+            <!-- Звук -->
+            <div id="menu-sound" class="menu-body" style="display: none;">
+                <button class="menu-back" onclick="openMenuSection('home')">← Назад</button>
+                <p class="menu-hint">Звуки в игре пока не подключены — значения сохранятся и заработают позже.</p>
+                <div class="field-group">
+                    <label class="field-label" for="sound-master">Общая громкость: <b id="sound-master-val">80</b>%</label>
+                    <input type="range" id="sound-master" class="sound-range" min="0" max="100" value="80">
+                </div>
+                <div class="field-group">
+                    <label class="field-label" for="sound-effects">Эффекты: <b id="sound-effects-val">100</b>%</label>
+                    <input type="range" id="sound-effects" class="sound-range" min="0" max="100" value="100">
+                </div>
+                <div class="field-group">
+                    <label class="field-label" for="sound-music">Музыка: <b id="sound-music-val">60</b>%</label>
+                    <input type="range" id="sound-music" class="sound-range" min="0" max="100" value="60">
+                </div>
+            </div>
+
+            <!-- Обновления -->
+            <div id="menu-update" class="menu-body" style="display: none;">
+                <button class="menu-back" onclick="openMenuSection('home')">← Назад</button>
+                <p class="menu-hint">Обновления берутся из GitHub Releases. Укажите репозиторий вида <b>владелец/репозиторий</b> — приложение само проверит новую версию.</p>
+                <div class="field-group">
+                    <label class="field-label" for="update-repo">Репозиторий GitHub</label>
+                    <input type="text" id="update-repo" class="text-input" placeholder="например, user/TextRPG">
+                </div>
+                <label class="check-row">
+                    <input type="checkbox" id="update-auto"> <span>Проверять при запуске</span>
+                </label>
+                <div class="menu-actions">
+                    <button class="btn-action" onclick="saveUpdateSettings()">Сохранить</button>
+                    <button class="btn-action btn-ghost" onclick="checkUpdate(true)">Проверить сейчас</button>
+                </div>
+                <div id="update-status" class="menu-status"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Карточка предмета: сначала описание, потом действия. Раньше тап по
          предмету сразу спрашивал слот, а описание было видно только после
          отмены — это и было неудобно. -->
@@ -183,6 +288,6 @@
         <div class="item-tip-actions" id="item-tip-actions"></div>
     </div>
 
-    <script src="/static/js/app.js?v=13"></script>
+    <script src="/static/js/app.js?v=14"></script>
 </body>
 </html>

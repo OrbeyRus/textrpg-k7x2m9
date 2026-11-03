@@ -1,36 +1,45 @@
 package com.textrpg.app
 
 import android.app.Activity
-import android.app.AlertDialog
+import android.content.ContentValues
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.OpenableColumns
-import android.view.Menu
-import android.view.MenuItem
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
-import android.webkit.ValueCallback
+import android.webkit.JavascriptInterface
 import android.webkit.JsPromptResult
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Единственный экран приложения.
  *
  * Запускает Python-сервер игры в фоновом потоке (Chaquopy) и показывает тот же
  * веб-интерфейс, что и на десктопе, внутри WebView на адресе 127.0.0.1.
+ * В страницу встроен мост `Android`: выход, сохранение лога и установка
+ * обновления — то, что из браузера сделать нельзя.
  */
 class MainActivity : Activity() {
 
@@ -61,6 +70,26 @@ class MainActivity : Activity() {
             // он подсовывает старые index.html и CSS. Отключаем начисто.
             @Suppress("DEPRECATION")
             settings.cacheMode = WebSettings.LOAD_NO_CACHE
+
+            // Мост в веб-страницу: выход, лог и установка обновления.
+            addJavascriptInterface(Bridge(), "Android")
+
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): Boolean {
+                    val url = request?.url?.toString() ?: return false
+                    // Свои страницы (локальный сервер) остаются внутри WebView,
+                    // внешние ссылки открываем в браузере телефона.
+                    return if (url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost")) {
+                        false
+                    } else {
+                        openExternal(url)
+                        true
+                    }
+                }
+            }
 
             webChromeClient = object : WebChromeClient() {
                 override fun onShowFileChooser(
@@ -103,7 +132,7 @@ class MainActivity : Activity() {
                         setSingleLine(true)
                         selectAll()
                     }
-                    AlertDialog.Builder(this@MainActivity)
+                    android.app.AlertDialog.Builder(this@MainActivity)
                         .setTitle(message ?: "")
                         .setView(input)
                         .setCancelable(false)
@@ -118,12 +147,7 @@ class MainActivity : Activity() {
         setContentView(webView)
         applyImmersiveMode()
         showLoading()
-
-        if (prefs.getString(KEY_API, "").isNullOrBlank()) {
-            promptForApiKey(firstRun = true)
-        } else {
-            startServerAndLoad()
-        }
+        startServerAndLoad()
     }
 
     /**
@@ -173,6 +197,9 @@ class MainActivity : Activity() {
             Python.start(AndroidPlatform(this))
         }
 
+        // Старый ключ из настроек Android, если пользователь вводил его раньше:
+        // он остаётся запасным для провайдера proxyapi. Основные настройки
+        // (провайдер, ключ, модель) теперь задаются в меню игры.
         val apiKey = prefs.getString(KEY_API, "") ?: ""
         Thread {
             val url = try {
@@ -220,47 +247,12 @@ class MainActivity : Activity() {
         webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
     }
 
-    private fun promptForApiKey(firstRun: Boolean) {
-        val input = EditText(this).apply {
-            hint = "PROXYAPI_KEY"
-            setText(prefs.getString(KEY_API, "") ?: "")
-            setSingleLine(true)
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Ключ proxyapi")
-            .setMessage("Введите ключ PROXYAPI_KEY — он нужен для обращений к модели.")
-            .setView(input)
-            .setCancelable(!firstRun)
-            .setPositiveButton("Сохранить") { _, _ ->
-                prefs.edit().putString(KEY_API, input.text.toString().trim()).apply()
-                if (firstRun) {
-                    startServerAndLoad()
-                } else {
-                    Toast.makeText(
-                        this,
-                        "Ключ сохранён. Перезапустите приложение.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-            .setNegativeButton(if (firstRun) "Выйти" else "Отмена") { _, _ ->
-                if (firstRun) finish()
-            }
-            .show()
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(Menu.NONE, MENU_API_KEY, Menu.NONE, "Ключ API")
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return if (item.itemId == MENU_API_KEY) {
-            promptForApiKey(firstRun = false)
-            true
-        } else {
-            super.onOptionsItemSelected(item)
+    /** Открывает внешнюю ссылку в браузере телефона. */
+    private fun openExternal(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Не удалось открыть ссылку", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -356,14 +348,197 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    /**
+     * Мост «страница → Android». Из браузера это недоступно, поэтому методы
+     * вызываются только внутри приложения.
+     */
+    private inner class Bridge {
+
+        /** Выход из игры. */
+        @JavascriptInterface
+        fun exitApp() {
+            runOnUiThread { finishAffinity() }
+        }
+
+        /** Открывает ссылку во внешнем браузере (страницы провайдеров). */
+        @JavascriptInterface
+        fun openUrl(url: String) {
+            runOnUiThread { openExternal(url) }
+        }
+
+        /** Версия приложения (versionName) — для проверки обновлений. */
+        @JavascriptInterface
+        fun appVersion(): String = try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+
+        /** Скачивает журнал игры с локального сервера в «Загрузки». */
+        @JavascriptInterface
+        fun saveLog(playerId: String) {
+            val base = serverUrl
+            if (base == null) {
+                toast("Сервер ещё не запустился")
+                return
+            }
+            Thread {
+                try {
+                    val text = httpGetText("${base}player/$playerId/log")
+                    if (text == null) {
+                        toast("Не удалось получить журнал")
+                        return@Thread
+                    }
+                    val name = "textrpg-log-$playerId.txt"
+                    val where = saveText(name, text)
+                    toast(if (where != null) "Журнал сохранён: $where" else "Не удалось сохранить журнал")
+                } catch (e: Exception) {
+                    toast("Ошибка журнала: ${e.message}")
+                }
+            }.start()
+        }
+
+        /** Скачивает APK обновления и открывает системную установку. */
+        @JavascriptInterface
+        fun downloadAndInstall(url: String) {
+            runOnUiThread {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                    !packageManager.canRequestPackageInstalls()
+                ) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Разрешите установку приложений из этого источника",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    try {
+                        startActivity(
+                            Intent(
+                                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                Uri.parse("package:$packageName")
+                            )
+                        )
+                    } catch (e: Exception) {
+                        // Настройки могут отсутствовать — пользователь сделает это вручную.
+                    }
+                    return@runOnUiThread
+                }
+
+                Toast.makeText(this@MainActivity, "Скачиваю обновление…", Toast.LENGTH_SHORT).show()
+                Thread {
+                    try {
+                        val apk = File(cacheDir, "update.apk")
+                        downloadFile(url, apk)
+                        runOnUiThread { installApk(apk) }
+                    } catch (e: Exception) {
+                        toast("Не удалось скачать обновление: ${e.message}")
+                    }
+                }.start()
+            }
+        }
+    }
+
+    private fun installApk(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            toast("Не удалось открыть установщик: ${e.message}")
+        }
+    }
+
+    /** Читает текст по HTTP (журнал игры с локального сервера). */
+    private fun httpGetText(url: String): String? {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15000
+            readTimeout = 30000
+        }
+        return try {
+            if (connection.responseCode != 200) return null
+            connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** Скачивает файл, самостоятельно проходя перенаправления GitHub. */
+    private fun downloadFile(url: String, target: File) {
+        var current = url
+        var hops = 0
+        while (true) {
+            val connection = (URL(current).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                connectTimeout = 20000
+                readTimeout = 60000
+                setRequestProperty("User-Agent", "TextRPG-Updater")
+            }
+            val code = connection.responseCode
+            if (code in 300..399) {
+                val location = connection.getHeaderField("Location")
+                    ?: throw Exception("нет адреса перенаправления")
+                current = if (location.startsWith("http")) {
+                    location
+                } else {
+                    URL(URL(current), location).toString()
+                }
+                connection.disconnect()
+                hops++
+                if (hops > 6) throw Exception("слишком много перенаправлений")
+                continue
+            }
+            if (code != 200) {
+                connection.disconnect()
+                throw Exception("HTTP $code")
+            }
+            connection.inputStream.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            connection.disconnect()
+            return
+        }
+    }
+
+    /** Сохраняет текст в «Загрузки» (на новых Android — без разрешений). */
+    private fun saveText(name: String, content: String): String? {
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, name)
+                put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val resolver = contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+            resolver.openOutputStream(uri)?.use { it.write(bytes) }
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            return "Загрузки/$name"
+        }
+
+        // Android 7–9: публичная папка требует разрешения, поэтому пишем в
+        // собственную папку приложения — она видна через файловый менеджер.
+        val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+        dir.mkdirs()
+        val file = File(dir, name)
+        file.writeBytes(bytes)
+        return file.absolutePath
+    }
+
+    private fun toast(message: String) {
+        runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
+    }
+
     companion object {
         private const val KEY_API = "proxy_api_key"
         private const val REQUEST_FILE = 1001
-        private const val MENU_API_KEY = 1
 
         // Версия веб-ассетов: меняйте при правках вёрстки/CSS, чтобы WebView
         // не использовал закэшированную страницу.
-        private const val ASSET_VERSION = 5
+        private const val ASSET_VERSION = 6
 
         // Адрес сервера, чтобы не поднимать его повторно после пересоздания Activity.
         @Volatile

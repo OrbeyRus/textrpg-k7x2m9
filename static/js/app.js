@@ -1229,6 +1229,384 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') hideItemTip();
 });
 
+// --- МЕНЮ И НАСТРОЙКИ ---
+// Внутри приложения доступен мост Android (см. MainActivity). В браузере его нет.
+const ANDROID = (typeof window.Android !== 'undefined') ? window.Android : null;
+
+let settingsCache = null;
+let selectedProvider = null;
+let updateInfo = null;
+
+function setStatus(id, text, cls) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerText = text || '';
+    el.className = 'menu-status' + (cls ? ' ' + cls : '');
+}
+
+function openMenu() {
+    const modal = document.getElementById('menu-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    openMenuSection('home');
+    refreshMenuSummaries();
+}
+
+function closeMenu() {
+    const modal = document.getElementById('menu-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function openMenuSection(name) {
+    const titles = { home: 'Меню', llm: 'Ключ ИИ', sound: 'Настройки звука', update: 'Обновления' };
+    ['home', 'llm', 'sound', 'update'].forEach(section => {
+        const el = document.getElementById('menu-' + section);
+        if (el) el.style.display = section === name ? 'flex' : 'none';
+    });
+    const title = document.getElementById('menu-title');
+    if (title) title.innerText = titles[name] || 'Меню';
+
+    if (name === 'llm') renderLlmSection();
+    if (name === 'sound') renderSoundSection();
+    if (name === 'update') renderUpdateSection();
+}
+
+async function loadSettings() {
+    try {
+        const response = await fetch('/settings');
+        settingsCache = await response.json();
+    } catch (error) {
+        settingsCache = null;
+    }
+    refreshMenuSummaries();
+}
+
+function refreshMenuSummaries() {
+    if (!settingsCache) return;
+    const llm = settingsCache.llm || {};
+    const sound = settingsCache.sound || {};
+    const update = settingsCache.update || {};
+
+    const llmEl = document.getElementById('menu-llm-summary');
+    if (llmEl) llmEl.innerText = llm.has_key
+        ? `${llm.label || llm.provider} · ${llm.model}`
+        : 'не задан';
+
+    const soundEl = document.getElementById('menu-sound-summary');
+    if (soundEl) soundEl.innerText = `общая громкость ${sound.master}%`;
+
+    const updateEl = document.getElementById('menu-update-summary');
+    if (updateEl) updateEl.innerText = update.repo ? update.repo : 'репозиторий не задан';
+}
+
+// --- Ключ ИИ ---
+function renderLlmSection() {
+    if (!settingsCache) return;
+    const llm = settingsCache.llm || {};
+    if (!selectedProvider) selectedProvider = llm.provider;
+
+    renderProviders();
+
+    const modelInput = document.getElementById('llm-model');
+    if (modelInput && !modelInput.value) modelInput.value = llm.model || '';
+    const baseInput = document.getElementById('llm-base');
+    if (baseInput && !baseInput.value) baseInput.value = llm.base_url || '';
+    const keyInput = document.getElementById('llm-key');
+    if (keyInput) keyInput.value = '';
+
+    updateBaseRow();
+    setStatus(
+        'llm-status',
+        llm.has_key ? `Сохранён ключ: ${llm.key_masked}` : 'Ключ ещё не задан.',
+        ''
+    );
+}
+
+function renderProviders() {
+    const holder = document.getElementById('provider-list');
+    if (!holder || !settingsCache) return;
+    holder.innerHTML = '';
+
+    (settingsCache.providers || []).forEach(provider => {
+        const card = document.createElement('div');
+        card.className = 'provider-card' + (provider.id === selectedProvider ? ' is-active' : '');
+
+        let html = `<b>${provider.label}</b>`;
+        if (provider.free) html += '<span class="provider-badge">бесплатно</span>';
+        if (provider.note) html += `<small>${provider.note}</small>`;
+        if (provider.key_url) {
+            html += `<a class="provider-link" href="${provider.key_url}" target="_blank" rel="noopener">где взять ключ</a>`;
+        }
+        card.innerHTML = html;
+        card.onclick = (event) => {
+            if (event.target.tagName === 'A') return; // ссылка открывается сама
+            selectProvider(provider.id);
+        };
+        holder.appendChild(card);
+    });
+}
+
+function selectProvider(id) {
+    selectedProvider = id;
+    const provider = ((settingsCache && settingsCache.providers) || []).find(p => p.id === id) || {};
+
+    const modelInput = document.getElementById('llm-model');
+    if (modelInput) modelInput.value = provider.default_model || '';
+
+    const list = document.getElementById('llm-models');
+    if (list) list.innerHTML = (provider.models || []).map(m => `<option value="${m}"></option>`).join('');
+
+    renderProviders();
+    updateBaseRow();
+}
+
+function updateBaseRow() {
+    const row = document.getElementById('llm-base-row');
+    if (row) row.style.display = selectedProvider === 'custom' ? 'flex' : 'none';
+}
+
+async function saveLlmSettings() {
+    if (!selectedProvider) return;
+    const model = (document.getElementById('llm-model').value || '').trim();
+    const base = (document.getElementById('llm-base').value || '').trim();
+    const keyInput = document.getElementById('llm-key');
+    const payload = { provider: selectedProvider, model: model, base_url: base };
+    if (keyInput && keyInput.value !== '') payload.api_key = keyInput.value.trim();
+
+    setStatus('llm-status', 'Сохраняю…', '');
+    try {
+        const response = await fetch('/settings/llm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        await loadSettings();
+        renderLlmSection();
+        setStatus('llm-status', 'Сохранено.', 'is-ok');
+    } catch (error) {
+        setStatus('llm-status', 'Не удалось сохранить: ' + error.message, 'is-error');
+    }
+}
+
+async function testLlmSettings() {
+    setStatus('llm-status', 'Проверяю модель…', '');
+    try {
+        const response = await fetch('/settings/llm/test', { method: 'POST' });
+        const data = await response.json();
+        if (data.status === 'ok') {
+            setStatus('llm-status', 'Модель ответила: ' + (data.answer || 'ок'), 'is-ok');
+        } else {
+            setStatus('llm-status', data.detail || 'Ошибка проверки.', 'is-error');
+        }
+    } catch (error) {
+        setStatus('llm-status', 'Ошибка проверки: ' + error.message, 'is-error');
+    }
+}
+
+// --- Звук (пока заглушка: звуков ещё нет) ---
+function bindSoundSliders() {
+    ['master', 'effects', 'music'].forEach(key => {
+        const slider = document.getElementById('sound-' + key);
+        const label = document.getElementById('sound-' + key + '-val');
+        if (!slider) return;
+        slider.addEventListener('input', () => { if (label) label.innerText = slider.value; });
+        slider.addEventListener('change', saveSoundSettings);
+    });
+}
+
+function renderSoundSection() {
+    if (!settingsCache) return;
+    const sound = settingsCache.sound || {};
+    ['master', 'effects', 'music'].forEach(key => {
+        const slider = document.getElementById('sound-' + key);
+        const label = document.getElementById('sound-' + key + '-val');
+        if (slider && typeof sound[key] === 'number') slider.value = sound[key];
+        if (label && slider) label.innerText = slider.value;
+    });
+}
+
+async function saveSoundSettings() {
+    const payload = {
+        master: parseInt(document.getElementById('sound-master').value, 10) || 0,
+        effects: parseInt(document.getElementById('sound-effects').value, 10) || 0,
+        music: parseInt(document.getElementById('sound-music').value, 10) || 0
+    };
+    try {
+        await fetch('/settings/sound', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (settingsCache) settingsCache.sound = payload;
+        refreshMenuSummaries();
+    } catch (error) {
+        // Громкость — не критично: молча оставляем как есть.
+    }
+}
+
+// --- Обновления ---
+function renderUpdateSection() {
+    if (!settingsCache) return;
+    const update = settingsCache.update || {};
+    const repo = document.getElementById('update-repo');
+    if (repo) repo.value = update.repo || '';
+    const auto = document.getElementById('update-auto');
+    if (auto) auto.checked = update.auto !== false;
+}
+
+async function saveUpdateSettings() {
+    const repo = (document.getElementById('update-repo').value || '').trim();
+    const auto = document.getElementById('update-auto').checked;
+    setStatus('update-status', 'Сохраняю…', '');
+    try {
+        const response = await fetch('/settings/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ repo: repo, auto: auto })
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        await loadSettings();
+        setStatus('update-status', 'Сохранено.', 'is-ok');
+    } catch (error) {
+        setStatus('update-status', 'Не удалось сохранить: ' + error.message, 'is-error');
+    }
+}
+
+async function checkUpdate(manual) {
+    const current = ANDROID ? ANDROID.appVersion()
+        : ((settingsCache && settingsCache.version) || '');
+    if (manual) setStatus('update-status', 'Проверяю…', '');
+    try {
+        const response = await fetch('/update/check?current=' + encodeURIComponent(current));
+        const data = await response.json();
+        updateInfo = data;
+
+        if (!data.configured) {
+            if (manual) setStatus('update-status', 'Укажите репозиторий GitHub и сохраните.', 'is-error');
+            return;
+        }
+        if (data.error) {
+            if (manual) setStatus('update-status', data.error, 'is-error');
+            return;
+        }
+        if (data.update_available) {
+            if (manual) setStatus('update-status', `Доступна версия ${data.latest}.`, 'is-ok');
+            showUpdateBanner(data);
+        } else if (manual) {
+            setStatus('update-status', `Обновлений нет (${data.latest || current}).`, 'is-ok');
+        }
+    } catch (error) {
+        if (manual) setStatus('update-status', 'Ошибка проверки: ' + error.message, 'is-error');
+    }
+}
+
+function showUpdateBanner(data) {
+    showBanner(`Доступно обновление ${data.latest}`, 'Обновить', installUpdate);
+}
+
+let bannerAction = null;
+
+function showBanner(text, actionLabel, action) {
+    const banner = document.getElementById('update-banner');
+    const label = document.getElementById('update-banner-text');
+    const button = document.getElementById('update-banner-action');
+    if (!banner) return;
+    if (label) label.innerText = text;
+    if (button && actionLabel) button.innerText = actionLabel;
+    bannerAction = action || null;
+    banner.style.display = 'flex';
+}
+
+function bannerPrimary() {
+    if (bannerAction) bannerAction();
+}
+
+function showKeyNotice() {
+    showBanner('Не задан ключ ИИ — ответы Мастера не будут приходить.', 'Настроить', () => {
+        dismissUpdate();
+        openMenu();
+        openMenuSection('llm');
+    });
+}
+
+function dismissUpdate() {
+    const banner = document.getElementById('update-banner');
+    if (banner) banner.style.display = 'none';
+    bannerAction = null;
+}
+
+function installUpdate() {
+    if (!updateInfo) return;
+    if (ANDROID && updateInfo.asset_url) {
+        ANDROID.downloadAndInstall(updateInfo.asset_url);
+        return;
+    }
+    openExternal(updateInfo.asset_url || updateInfo.page);
+}
+
+function openExternal(url) {
+    if (!url) return;
+    if (ANDROID) {
+        ANDROID.openUrl(url);
+    } else {
+        window.open(url, '_blank', 'noopener');
+    }
+}
+
+// --- Лог и выход ---
+async function saveLogFile() {
+    if (!playerId) {
+        alert('Сначала создайте героя.');
+        return;
+    }
+    if (ANDROID) {
+        ANDROID.saveLog(String(playerId));
+        return;
+    }
+    try {
+        const response = await fetch(`/player/${playerId}/log`);
+        const text = await response.text();
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `log_${playerId}.txt`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (error) {
+        alert('Не удалось сохранить лог: ' + error.message);
+    }
+}
+
+function exitApp() {
+    if (ANDROID) {
+        ANDROID.exitApp();
+        return;
+    }
+    if (confirm('Закрыть игру? На компьютере закройте вкладку браузера.')) {
+        window.close();
+    }
+}
+
+async function initSettings() {
+    await loadSettings();
+    bindSoundSliders();
+    const update = (settingsCache && settingsCache.update) || {};
+    if (update.auto && update.repo) checkUpdate(false);
+
+    // Если ключ не задан, предупредим — иначе первый же ход «сломается».
+    if (settingsCache && settingsCache.llm && !settingsCache.llm.has_key) {
+        setTimeout(() => {
+            const game = document.getElementById('game-screen');
+            if (game && game.style.display !== 'none') showKeyNotice();
+        }, 1200);
+    }
+}
+
 // Запуск при открытии страницы
 loadGenres();
 loadPlayer();
+initSettings();

@@ -58,3 +58,15 @@ def test_reset_unknown_player_is_noop():
     response = client.post("/reset/999999")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_settings_endpoint_lists_providers_without_keys():
+    response = client.get("/settings")
+    assert response.status_code == 200
+    data = response.json()
+
+    ids = {provider["id"] for provider in data["providers"]}
+    assert {"gemini", "groq", "openrouter", "custom"} <= ids
+    assert "has_key" in data["llm"]
+    assert "key" not in data["llm"]
+    assert "master" in data["sound"]

@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import INDEX_FILE, STATIC_DIR
-from app.routers import abilities, books, combat, game, player, saves
+from app.routers import abilities, books, combat, game, player, saves, settings, update
 
 app = FastAPI(title="Text RPG Server")
 
@@ -21,6 +21,8 @@ app.include_router(game.router)
 app.include_router(combat.router)
 app.include_router(abilities.router)
 app.include_router(saves.router)
+app.include_router(settings.router)
+app.include_router(update.router)
 
 
 @app.get("/")

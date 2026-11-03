@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app import database
@@ -191,3 +192,33 @@ def drop_item(player_id: int, item: AbilityLearn, db: Session = Depends(get_db))
         db.commit()
         return {"status": "success"}
     raise HTTPException(status_code=400, detail="Предмет не найден")
+
+
+@router.get("/{player_id}/log")
+def export_log(player_id: int, db: Session = Depends(get_db)):
+    """Выгружает журнал игры одним текстовым файлом.
+
+    Внутри — читаемая «история приключения» и технический журнал: это то, что
+    нужно, чтобы разобрать проблему в игре.
+    """
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player:
+        raise HTTPException(status_code=404, detail="Нет персонажа")
+
+    directory = gamelog.player_dir(db_player)
+    chunks = []
+
+    story = directory / "story.md"
+    if story.exists():
+        chunks.append("== ИСТОРИЯ ПРИКЛЮЧЕНИЯ ==\n\n" + story.read_text(encoding="utf-8"))
+
+    game = directory / "game.log"
+    if game.exists():
+        chunks.append("== ТЕХНИЧЕСКИЙ ЖУРНАЛ ==\n\n" + game.read_text(encoding="utf-8"))
+
+    if not chunks:
+        chunks.append("Журнал пуст: сыграйте хотя бы один ход и повторите.")
+
+    name = gamelog.safe_name(getattr(db_player, "name", "")) or "player"
+    headers = {"Content-Disposition": f'attachment; filename="log_{name}_{player_id}.txt"'}
+    return PlainTextResponse("\n\n".join(chunks), headers=headers)
