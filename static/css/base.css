@@ -1,0 +1,128 @@
+/* База: переменные, шрифты, фон, общие элементы. */
+
+@import url('https://fonts.googleapis.com/css2?family=Ruslan+Display&family=Cormorant+Garamond:wght@400;500;600;700&display=swap');
+
+/* ============================================================
+   TEXT RPG — оформление «Тёмный фолиант»
+   Тёмные чернила + тёплое золото, мягкие анимации, отклик на действия
+   ============================================================ */
+
+:root {
+    --ink-900: #07090c;
+    --ink-800: #0c0f14;
+    --ink-700: #12161d;
+    --ink-600: #171c25;
+    --ink-500: #1d232e;
+    --line: #2a3140;
+    --line-soft: #222833;
+
+    --gold: #e0b050;
+    --gold-soft: #f0cd8d;
+    --gold-dim: #a8843c;
+    --gold-glow: rgba(224, 176, 80, 0.35);
+
+    --text: #d9d5c9;
+    --text-dim: #a9a394;
+    --muted: #7d7969;
+
+    --hp-a: #8f0d0d;
+    --hp-b: #ff3b3b;
+    --xp-a: #0a4aa8;
+    --xp-b: #57a6ff;
+
+    --font-body: 'Cormorant Garamond', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+    --font-display: 'Cormorant Garamond', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+    --font-title: 'Ruslan Display', 'Cormorant Garamond', Georgia, serif;
+
+    --radius: 14px;
+    --shadow-panel: 0 22px 48px -26px #000, inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+* { box-sizing: border-box; }
+
+html, body { min-height: 100%; }
+
+body {
+    margin: 0;
+    padding: 26px 22px 40px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    background:
+        radial-gradient(1200px 700px at 50% -14%, rgba(224, 176, 80, 0.22), transparent 64%),
+        radial-gradient(900px 700px at 2% 8%, rgba(104, 74, 168, 0.26), transparent 62%),
+        radial-gradient(900px 700px at 99% 14%, rgba(38, 96, 132, 0.24), transparent 62%),
+        radial-gradient(700px 500px at 50% 46%, rgba(224, 176, 80, 0.07), transparent 70%),
+        radial-gradient(1100px 760px at 50% 118%, rgba(0, 0, 0, 0.80), transparent 66%),
+        linear-gradient(180deg, #0b0e16 0%, #05070b 52%, #090b13 100%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 17px;
+    letter-spacing: 0.01em;
+    overflow-x: hidden;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+        radial-gradient(ellipse at 50% 32%, transparent 50%, rgba(0, 0, 0, 0.62) 100%);
+    box-shadow: inset 0 0 130px 14px rgba(0, 0, 0, 0.72);
+}
+
+/* ---------- фоновая иллюстрация ---------- */
+.bg-art {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: url('/static/fantasy-background.jpg') center / cover no-repeat;
+    filter: blur(1.6px) saturate(1.22) brightness(1.65) contrast(1.03);
+    transform: scale(1.04);
+}
+.bg-art::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(1200px 900px at 50% 45%, rgba(3, 5, 9, 0.74) 0%, rgba(3, 5, 9, 0.42) 55%, transparent 80%),
+        radial-gradient(1200px 700px at 50% -12%, rgba(224, 176, 80, 0.20), transparent 62%),
+        radial-gradient(760px 620px at 2% 6%, rgba(104, 74, 168, 0.18), transparent 62%),
+        radial-gradient(760px 620px at 99% 12%, rgba(38, 96, 132, 0.14), transparent 62%),
+        linear-gradient(180deg, rgba(5, 7, 11, 0.24) 0%, rgba(4, 6, 10, 0.40) 58%, rgba(6, 8, 14, 0.60) 100%),
+        radial-gradient(ellipse at 50% 40%, transparent 46%, rgba(0, 0, 0, 0.52) 100%);
+    animation: candleFlicker 6s ease-in-out infinite;
+}
+
+/* золотая рамка-окантовка «фолианта» */
+body::after {
+    content: '';
+    position: fixed;
+    inset: 9px;
+    z-index: 0;
+    pointer-events: none;
+    border: 1px solid rgba(224, 176, 80, 0.16);
+    border-radius: 12px;
+    box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.65);
+}
+
+@keyframes candleFlicker {
+    0%, 100% { opacity: 0.88; }
+    50%      { opacity: 1; }
+}
+
+/* ---------- фоновая «пыль» ---------- */
+.ambience {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.85;
+}
+.ambience canvas { width: 100%; height: 100%; display: block; }
+

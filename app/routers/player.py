@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from dependencies import get_db
-from schemas import PlayerCreate, StatUpgrade, AbilityLearn, EquipItem
-from services import progression
-import database
+
+from app import database
+from app.dependencies import get_db
+from app.schemas import AbilityLearn, EquipItem, PlayerCreate, StatUpgrade
+from app.services import progression
 
 router = APIRouter(prefix="/player", tags=["player"])
 

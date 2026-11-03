@@ -1,29 +1,8 @@
-import re
 import json
-import requests
+import re
 
-from services import progression
+from app.services import progression
 
-PROXYAPI_KEY = "sk-1qw8TPODi6lqwN5gxNb5yWQnp2bo3sgQ"
-
-def call_llm(prompt: str, max_tokens: int = 800):
-    try:
-        headers = {"Authorization": f"Bearer {PROXYAPI_KEY}", "Content-Type": "application/json"}
-        data = {
-            "model": "deepseek/deepseek-v3.2",
-            "messages": [
-                {"role": "system", "content": "Ты — профессиональный писатель и Мастер Игры. Отвечай строго на русском."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.4, "max_tokens": max_tokens
-        }
-        
-        response = requests.post("https://api.proxyapi.ru/v1/chat/completions", headers=headers, json=data, timeout=40)
-        if response.status_code != 200: raise Exception(f"Ошибка {response.status_code}: {response.text}")
-            
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        raise Exception(f"Ошибка LLM: {e}")
 
 def parse_effects(full_text, db_player):
     effects_list = []

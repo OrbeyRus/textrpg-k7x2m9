@@ -1,3 +1,9 @@
 fastapi
 uvicorn
 sqlalchemy
+python-multipart
+requests
+numpy
+ollama
+pytest
+httpx

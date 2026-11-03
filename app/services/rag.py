@@ -1,9 +1,12 @@
 import json
-import os
+from pathlib import Path
+
 import numpy as np
 import ollama
-from fastapi import UploadFile, HTTPException
-import database
+from fastapi import HTTPException, UploadFile
+
+from app import database
+from app.config import BOOKS_DIR
 
 def split_text(text, chunk_size=1000, overlap=200):
     chunks = []
@@ -13,9 +16,14 @@ def split_text(text, chunk_size=1000, overlap=200):
 
 def get_player_book(player_id: int, db):
     db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
-    if not db_player or not db_player.book_file or not os.path.exists(db_player.book_file):
+    if not db_player or not db_player.book_file:
         return []
-    with open(db_player.book_file, "r", encoding="utf-8") as f:
+
+    book_path = BOOKS_DIR / Path(db_player.book_file).name
+    if not book_path.exists():
+        return []
+
+    with open(book_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def get_relevant_context(book_data, query, top_k=1):
@@ -42,6 +50,7 @@ async def process_book_upload(file: UploadFile, player_id: int, db):
         raise HTTPException(status_code=400, detail="Только .txt файлы")
     
     book_filename = f"book_{player_id}.json"
+    book_path = BOOKS_DIR / book_filename
     
     try:
         content = await file.read()
@@ -58,7 +67,7 @@ async def process_book_upload(file: UploadFile, player_id: int, db):
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Ошибка Ollama: {e}")
         
-        with open(book_filename, "w", encoding="utf-8") as f:
+        with open(book_path, "w", encoding="utf-8") as f:
             json.dump(new_book_data, f, ensure_ascii=False)
         
         db_player.book_file = book_filename

@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
-from dependencies import get_db
-import database
-from services import rag, llm, progression
+
+from app import database
+from app.config import DEBUG_LOG
+from app.dependencies import get_db
+from app.services import llm, progression, rag
 
 router = APIRouter(tags=["game"])
 
@@ -126,7 +128,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 
     try:
         full_text = llm.call_llm(prompt)
-        with open("debug_log.txt", "a", encoding="utf-8") as f:
+        with open(DEBUG_LOG, "a", encoding="utf-8") as f:
             f.write(f"\n--- ИГРОК {player_id} ---\n" + full_text + "\n---\n")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

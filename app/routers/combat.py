@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from dependencies import get_db
-import database
-from services import llm, progression
+
+from app import database
+from app.dependencies import get_db
+from app.services import llm, progression
 
 router = APIRouter(prefix="/combat", tags=["combat"])
 
