@@ -1,0 +1,117 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from dependencies import get_db
+from schemas import PlayerCreate, StatUpgrade, AbilityLearn, EquipItem
+from services import progression
+import database
+
+router = APIRouter(prefix="/player", tags=["player"])
+
+@router.post("/")
+def create_player(player: PlayerCreate, db: Session = Depends(get_db)):
+    db_player = database.Player(
+        name=player.name,
+        level=progression.START_LEVEL,
+        next_level_xp=progression.xp_to_next(progression.START_LEVEL),
+        stat_points=progression.START_STAT_POINTS,
+        ability_points=progression.START_ABILITY_POINTS,
+    )
+    db.add(db_player)
+    db.commit()
+    db.refresh(db_player)
+    return db_player
+
+@router.get("/{player_id}")
+def get_player(player_id: int, db: Session = Depends(get_db)):
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player: raise HTTPException(status_code=404, detail="Нет персонажа")
+    return db_player
+
+@router.post("/{player_id}/upgrade")
+def upgrade_stat(player_id: int, upgrade: StatUpgrade, db: Session = Depends(get_db)):
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player: raise HTTPException(status_code=404)
+
+    # защита от подмены: повышать можно только реальные характеристики
+    if upgrade.stat_name not in progression.STAT_KEYS:
+        raise HTTPException(status_code=400, detail="Неизвестная характеристика")
+
+    cost = progression.POINT_COST
+    if db_player.stat_points < cost:
+        raise HTTPException(status_code=400, detail="Нет очков характеристик")
+
+    old_value = getattr(db_player, upgrade.stat_name)
+    setattr(db_player, upgrade.stat_name, old_value + 1)
+    db_player.stat_points -= cost
+    hp_gain = progression.apply_stat_increase(db_player, upgrade.stat_name, old_value)
+
+    db.commit()
+    return {
+        "status": "success",
+        "stat": upgrade.stat_name,
+        "value": old_value + 1,
+        "cost": cost,
+        "stat_points": db_player.stat_points,
+        "hp_gain": hp_gain,
+        "max_hp": db_player.max_hp,
+        "hp": db_player.hp,
+    }
+
+@router.post("/{player_id}/learn_ability")
+def learn_ability(player_id: int, ability: AbilityLearn, db: Session = Depends(get_db)):
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player: raise HTTPException(status_code=404)
+    if db_player.ability_points > 0:
+        current_abilities = list(db_player.abilities) if db_player.abilities else []
+        if ability.ability_name not in current_abilities:
+            current_abilities.append(ability.ability_name)
+            db_player.abilities = current_abilities
+            db_player.ability_points -= 1
+            db.commit()
+            return {"status": "success", "learned": ability.ability_name}
+    raise HTTPException(status_code=400, detail="Нет очков")
+
+@router.post("/{player_id}/equip")
+def equip_item(player_id: int, item: EquipItem, db: Session = Depends(get_db)):
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player: raise HTTPException(status_code=404)
+    current_inv = list(db_player.inventory) if db_player.inventory else []
+    current_eq = dict(db_player.equipment) if db_player.equipment else {}
+    if item.item_name in current_inv:
+        current_inv.remove(item.item_name)
+        db_player.inventory = current_inv
+        if item.slot in current_eq:
+            current_inv.append(current_eq[item.slot])
+            db_player.inventory = current_inv
+        current_eq[item.slot] = item.item_name
+        db_player.equipment = current_eq
+        db.commit()
+        return {"status": "success"}
+    raise HTTPException(status_code=400, detail="Предмет не найден")
+
+@router.post("/{player_id}/unequip")
+def unequip_item(player_id: int, item: EquipItem, db: Session = Depends(get_db)):
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player: raise HTTPException(status_code=404)
+    current_eq = dict(db_player.equipment) if db_player.equipment else {}
+    current_inv = list(db_player.inventory) if db_player.inventory else []
+    if item.slot in current_eq:
+        current_inv.append(current_eq[item.slot])
+        db_player.inventory = current_inv
+        del current_eq[item.slot]
+        db_player.equipment = current_eq
+        db.commit()
+        return {"status": "success"}
+    raise HTTPException(status_code=400, detail="Слот пуст")
+
+@router.post("/{player_id}/drop")
+def drop_item(player_id: int, item: AbilityLearn, db: Session = Depends(get_db)):
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player: raise HTTPException(status_code=404)
+    current_inv = list(db_player.inventory) if db_player.inventory else []
+    if item.ability_name in current_inv:
+        current_inv.remove(item.ability_name)
+        db_player.inventory = current_inv
+        db.commit()
+        return {"status": "success"}
+    raise HTTPException(status_code=400, detail="Предмет не найден")

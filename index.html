@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#07090c">
+    <title>Text RPG — Мир приключений</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="/static/style.css?v=15">
+</head>
+<body>
+
+    <!-- Фоновая иллюстрация -->
+    <div class="bg-art" aria-hidden="true"></div>
+
+    <!-- Фоновая «пыль» -->
+    <div class="ambience" aria-hidden="true"><canvas id="embers"></canvas></div>
+
+    <!-- ЭКРАН ОНБОРДИНГА -->
+    <div id="onboarding-screen" class="overlay" style="display: none;">
+        <div class="onboarding-card">
+            <div class="onboarding-crest">✦</div>
+            <h1 class="onboarding-title">Создание мира</h1>
+            <p class="onboarding-sub">Тёмный фолиант ждёт своего героя</p>
+
+            <div id="step-name" class="step">
+                <p class="step-label">Шаг 1. Как зовут вашего персонажа?</p>
+                <input type="text" id="player-name-input" class="text-input" placeholder="Введите имя..." autocomplete="off">
+                <button class="btn-action btn-block" onclick="createPlayer()">Создать героя</button>
+            </div>
+
+            <div id="step-book" class="step" style="display: none;">
+                <p class="step-ok">✓ Герой создан</p>
+                <p class="step-label">Шаг 2. Загрузите книгу в формате .TXT, по лору которой хотите играть.</p>
+                <input type="file" id="book-file" accept=".txt" hidden onchange="uploadBook()">
+                <button class="btn-action btn-block" onclick="document.getElementById('book-file').click()">Выбрать файл .txt</button>
+                <div id="book-progress" class="book-progress" style="display: none;">Обработка книги… Это займёт пару минут. Пожалуйста, подождите.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ОСНОВНОЙ ИГРОВОЙ ЭКРАН -->
+    <div class="game-layout" id="game-screen" style="display: none;">
+
+        <aside class="panel panel-left">
+            <h2>Персонаж</h2>
+            <div class="char-info" id="char-info">
+                <div class="char-row"><span>Имя</span><b id="c-name"></b></div>
+                <div class="char-row"><span>Уровень</span><b id="c-level"></b></div>
+            </div>
+
+            <button class="menu-btn menu-btn-quest" onclick="openQuests()">
+                <span class="ico">📜</span> Журнал квестов
+            </button>
+
+            <input type="file" id="new-book-file" accept=".txt" hidden onchange="changeBook()">
+            <button class="menu-btn menu-btn-book" onclick="document.getElementById('new-book-file').click()">
+                <span class="ico">📚</span> Сменить книгу
+            </button>
+
+            <h2 style="margin-top: 24px;">Характеристики</h2>
+            <div class="points-avail">Доступно очков: <span id="c-points">0</span></div>
+            <div class="stats-list">
+                <div class="stat-row"><span class="stat-name">Сила</span> <div><span class="stat-value" id="s-str">5</span><button class="btn-plus" onclick="upgrade('strength')" disabled>+</button></div></div>
+                <div class="stat-row"><span class="stat-name">Ловкость</span> <div><span class="stat-value" id="s-agi">5</span><button class="btn-plus" onclick="upgrade('agility')" disabled>+</button></div></div>
+                <div class="stat-row"><span class="stat-name">Живучесть</span> <div><span class="stat-value" id="s-vit">5</span><button class="btn-plus" onclick="upgrade('vitality')" disabled>+</button></div></div>
+                <div class="stat-row"><span class="stat-name">Интеллект</span> <div><span class="stat-value" id="s-int">5</span><button class="btn-plus" onclick="upgrade('intelligence')" disabled>+</button></div></div>
+                <div class="stat-row"><span class="stat-name">Восприятие</span> <div><span class="stat-value" id="s-per">5</span><button class="btn-plus" onclick="upgrade('perception')" disabled>+</button></div></div>
+                <div class="stat-row"><span class="stat-name">Удача</span> <div><span class="stat-value" id="s-lck">5</span><button class="btn-plus" onclick="upgrade('luck')" disabled>+</button></div></div>
+            </div>
+
+            <h2 style="margin-top: 24px;">Способности</h2>
+            <div class="points-avail">Очков способностей: <span id="c-ab-points">0</span></div>
+            <div id="abilities-list" style="display: flex; flex-direction: column; gap: 5px;"></div>
+        </aside>
+
+        <main class="center-panel">
+            <div class="top-bar">
+                <h1>Мир приключений</h1>
+                <button class="btn-reset" onclick="resetGame()">Сброс</button>
+            </div>
+
+            <div class="bars-panel">
+                <div class="bar-container">
+                    <div class="bar-fill hp-fill" id="hp-bar" style="width: 100%;"></div>
+                    <div class="bar-text" id="hp-text">100 / 100 HP</div>
+                </div>
+                <div class="bar-container">
+                    <div class="bar-fill xp-fill" id="xp-bar" style="width: 0%;"></div>
+                    <div class="bar-text" id="xp-text">0 / 100 XP</div>
+                </div>
+            </div>
+
+            <div class="story-box" id="story">Загрузка...</div>
+
+            <div class="effects-container" id="effects-log"></div>
+
+            <div class="input-group">
+                <input type="text" id="custom-input" placeholder="Что вы хотите сделать?" autocomplete="off">
+                <button class="btn-action" onclick="submitAction()">Действовать</button>
+            </div>
+        </main>
+
+        <aside class="panel panel-right">
+            <h2>Экипировка</h2>
+            <div class="equipment-grid">
+                <div class="eq-slot" title="Шлем" data-type="helmet"><span class="eq-ico" style="--ico:url('/static/icons/helmet.svg')"></span></div>
+                <div class="eq-slot" title="Амулет" data-type="amulet"><span class="eq-ico" style="--ico:url('/static/icons/amulet.svg')"></span></div>
+                <div class="eq-slot" title="Оружие" data-type="weapon"><span class="eq-ico" style="--ico:url('/static/icons/weapon.svg')"></span></div>
+                <div class="eq-slot" title="Броня" data-type="armor"><span class="eq-ico" style="--ico:url('/static/icons/armor.svg')"></span></div>
+                <div class="eq-char"><span class="eq-ico" style="--ico:url('/static/icons/hero.svg')"></span></div>
+                <div class="eq-slot" title="Перчатки" data-type="gloves"><span class="eq-ico" style="--ico:url('/static/icons/gloves.svg')"></span></div>
+                <div class="eq-slot" title="Сапоги" data-type="boots"><span class="eq-ico" style="--ico:url('/static/icons/boots.svg')"></span></div>
+                <div class="eq-slot" title="Кольцо" data-type="ring"><span class="eq-ico" style="--ico:url('/static/icons/ring.svg')"></span></div>
+                <div class="eq-slot" title="Плащ" data-type="cloak"><span class="eq-ico" style="--ico:url('/static/icons/cloak.svg')"></span></div>
+            </div>
+            <div class="icon-credit">Иконки: Lorc, Delapouite · game-icons.net · CC BY 3.0</div>
+
+            <h2 class="bag-title">Сумка</h2>
+            <div class="location-line">Локация: <span id="c-loc">Неизвестно</span></div>
+            <div class="bag-grid" id="bag-container"></div>
+        </aside>
+    </div>
+
+    <!-- БОЕВОЙ ЭКРАН (JRPG) -->
+    <div id="combat-screen" class="combat-screen" style="display: none;">
+        <div class="combat-card">
+
+            <div class="combat-enemy">
+                <div class="combat-enemy-name" id="combat-enemy-name">Враг</div>
+                <div class="bar-container combat-bar">
+                    <div class="bar-fill" id="combat-enemy-hp-bar" style="background: linear-gradient(90deg, #8f0d0d, #ff3b3b); width: 100%;"></div>
+                    <div class="bar-text" id="combat-enemy-hp-text">30 / 30 HP</div>
+                </div>
+            </div>
+
+            <div id="combat-log" class="combat-log">Бой начинается!</div>
+
+            <div id="combat-actions" class="combat-actions">
+                <button class="btn-action" onclick="doCombatAction('Атаковать оружием')">⚔️ Атака</button>
+                <button class="btn-action" onclick="doCombatAction('Использовать магию')">✨ Способности</button>
+                <button class="btn-action" onclick="doCombatAction('Использовать предмет')">🎒 Предметы</button>
+                <button class="btn-action btn-flee" onclick="tryFlee()">🏃 Побег</button>
+            </div>
+
+            <div class="combat-player-hp">Твоё HP: <span id="combat-player-hp">100</span></div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО КВЕСТОВ -->
+    <div id="quest-modal" class="overlay quest-overlay" style="display: none;">
+        <div class="quest-card">
+            <div class="quest-head">
+                <h2>Журнал квестов</h2>
+                <button class="icon-btn" onclick="closeQuests()" aria-label="Закрыть">&times;</button>
+            </div>
+            <div id="quest-list-container"></div>
+        </div>
+    </div>
+
+    <script src="/static/script.js?v=2"></script>
+</body>
+</html>

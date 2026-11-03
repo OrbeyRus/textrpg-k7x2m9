@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Секреты
+.env
+
+# Runtime-данные
+data/rpg.db
+data/rpg.db-journal
+data/books/*.json
+data/book_index.json
+data/debug.log
+data/source/*.txt
+
+# Старые бэкапы и ярлыки
+*.7z
+*.url
+
+# Временные файлы
+*.log
+
+# Файлы до переноса в data/ (не храним содержимое книг и базу в git)
+/rpg.db
+/book_1.json
+/book.txt
+/debug_log.txt

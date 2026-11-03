@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Иконки экипировки</title>
+<style>
+  body { margin: 0; padding: 40px; background: radial-gradient(700px 400px at 50% 0%, #1a202b, #080b10 75%); color: #d9d5c9; font-family: Georgia, serif; }
+  h1 { font-size: 1.1rem; letter-spacing: .12em; text-transform: uppercase; color: #e0b050; text-align: center; }
+  .grid { display: grid; grid-template-columns: repeat(3, 120px); gap: 12px; justify-content: center; }
+  .cell { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; aspect-ratio: 1; border: 1px solid rgba(224,176,80,.28); border-radius: 4px; background: radial-gradient(circle at 50% 28%, rgba(224,176,80,.08), rgba(255,255,255,.01) 70%); }
+  .ico { width: 46px; height: 46px; background-color: #a8843c; -webkit-mask: var(--ico) center / contain no-repeat; mask: var(--ico) center / contain no-repeat; }
+  .cap { font-size: .62rem; letter-spacing: .08em; color: #8d8878; text-transform: uppercase; }
+</style>
+</head>
+<body>
+  <h1>Иконки экипировки</h1>
+  <div class="grid">
+    <div class="cell"><span class="ico" style="--ico:url('helmet.svg')"></span><span class="cap">Шлем</span></div>
+    <div class="cell"><span class="ico" style="--ico:url('amulet.svg')"></span><span class="cap">Амулет</span></div>
+    <div class="cell"><span class="ico" style="--ico:url('weapon.svg')"></span><span class="cap">Оружие</span></div>
+    <div class="cell"><span class="ico" style="--ico:url('armor.svg')"></span><span class="cap">Броня</span></div>
+    <div class="cell"><span class="ico" style="--ico:url('hero.svg')"></span><span class="cap">Герой</span></div>
+    <div class="cell"><span class="ico" style="--ico:url('gloves.svg')"></span><span class="cap">Перчатки</span></div>
+    <div class="cell"><span class="ico" style="--ico:url('boots.svg')"></span><span class="cap">Сапоги</span></div>
+    <div class="cell"><span class="ico" style="--ico:url('ring.svg')"></span><span class="cap">Кольцо</span></div>
+    <div class="cell"><span class="ico" style="--ico:url('cloak.svg')"></span><span class="cap">Плащ</span></div>
+  </div>
+</body>
+</html>
