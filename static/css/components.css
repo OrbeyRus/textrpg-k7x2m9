@@ -184,13 +184,21 @@
     inset: 0;
     z-index: 1000;
     display: flex;
-    align-items: center;
+    /* Авторские поля: на узком/низком экране карточка уходит в прокрутку,
+       а не обрезается сверху и снизу. Центрирование делает margin: auto
+       у самой карточки. */
+    align-items: flex-start;
     justify-content: center;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: 20px;
 }
 .overlay::before {
     content: '';
-    position: absolute;
+    /* fixed, чтобы тёмная подложка закрывала весь экран и не «уезжала»
+       при прокрутке содержимого оверлея. */
+    position: fixed;
     inset: 0;
     background: rgba(4, 6, 9, 0.78);
     backdrop-filter: blur(5px);
@@ -201,6 +209,9 @@
     position: relative;
     z-index: 1;
     width: min(520px, 96vw);
+    /* Автополя: по центру, когда влезает; прижат к верху, когда выше экрана,
+       чтобы верх карточки был доступен при прокрутке. */
+    margin: auto;
     padding: 38px 36px 34px;
     text-align: center;
     background:
@@ -303,7 +314,12 @@
     inset: 0;
     z-index: 3000;
     display: flex;
-    align-items: center;
+    /* Как и у оверлеев: при нехватке высоты карточка боя уходит в прокрутку,
+       а не обрезается вместе с кнопками. */
+    align-items: flex-start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     justify-content: center;
     padding: 24px;
     background:
@@ -314,6 +330,7 @@
 
 .combat-card {
     width: min(780px, 100%);
+    margin: auto;
 }
 .combat-screen.is-open .combat-card { animation: combatIn 0.45s cubic-bezier(0.2, 1, 0.3, 1) both; }
 @keyframes combatIn {
@@ -389,6 +406,7 @@
     width: min(620px, 96vw);
     max-height: 82vh;
     overflow-y: auto;
+    margin: auto;
     padding: 26px 28px;
     background:
         radial-gradient(500px 220px at 50% -20%, rgba(224, 176, 80, 0.12), transparent 70%),
