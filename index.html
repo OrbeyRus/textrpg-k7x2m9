@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#07090c">
     <title>Text RPG — Мир приключений</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="/static/css/base.css?v=6">
+    <link rel="preload" href="/static/fonts/cormorant-garamond-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="/static/fonts/ruslan-display-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/static/fonts/fonts.css?v=1">
+    <link rel="stylesheet" href="/static/css/base.css?v=7">
     <link rel="stylesheet" href="/static/css/layout.css?v=5">
-    <link rel="stylesheet" href="/static/css/components.css?v=10">
+    <link rel="stylesheet" href="/static/css/components.css?v=11">
 </head>
 <body>
 
@@ -170,10 +171,18 @@
         </div>
     </div>
 
-    <!-- Описание предмета: на телефоне подсказки при наведении уезжали за
-         край экрана, поэтому там описание показывается полосой внизу. -->
-    <div id="item-tip" class="item-tip" aria-live="polite"></div>
+    <!-- Карточка предмета: сначала описание, потом действия. Раньше тап по
+         предмету сразу спрашивал слот, а описание было видно только после
+         отмены — это и было неудобно. -->
+    <div id="item-tip" class="item-tip" role="dialog" aria-label="Предмет">
+        <div class="item-tip-head">
+            <b id="item-tip-name"></b>
+            <button class="icon-btn" onclick="hideItemTip()" aria-label="Закрыть">&times;</button>
+        </div>
+        <div class="item-tip-desc" id="item-tip-desc"></div>
+        <div class="item-tip-actions" id="item-tip-actions"></div>
+    </div>
 
-    <script src="/static/js/app.js?v=12"></script>
+    <script src="/static/js/app.js?v=13"></script>
 </body>
 </html>

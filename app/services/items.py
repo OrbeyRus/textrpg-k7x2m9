@@ -105,6 +105,39 @@ def _category_text(name: str) -> str:
     return "Предмет из ваших странствий: пригодится, если знать, когда пустить его в дело."
 
 
+# Слоты экипировки и ключевые слова, по которым предмет в них угадывается.
+# Порядок важен: «щит» — это броня, а не оружие, хотя тоже железный.
+_SLOT_RULES = (
+    (("шлем", "каск", "капюшон", "шляпа"), "helmet"),
+    (("амулет", "медальон", "кулон", "оберег", "талисман"), "amulet"),
+    (("перчат", "рукавиц", "наруч"), "gloves"),
+    (("сапог", "ботин", "башмак", "обув"), "boots"),
+    (("плащ", "манти", "накидк"), "cloak"),
+    (("кольцо", "перстень"), "ring"),
+    (("латы", "кольчуг", "кирас", "доспех", "панцир", "чешуй", "брон",
+      "щит", "рубах", "куртк"), "armor"),
+    (("меч", "катана", "сабл", "шпага", "рапира", "палаш", "топор", "секира",
+      "булава", "молот", "копь", "копьё", "глефа", "алебард", "дубина",
+      "палица", "кинжал", "нож", "стилет", "тесак", "мачете", "заточк",
+      "лук", "арбалет", "праща", "дротик", "пистолет", "револьвер", "автомат",
+      "винтовк", "дробовик", "карабин", "пулемёт", "пулемет", "ружь",
+      "бластер", "посох", "жезл", "кнут"), "weapon"),
+)
+
+
+def suggest_slot(name: str) -> str:
+    """Слот, в который логичнее всего положить предмет (по названию).
+
+    Пустая строка, если угадать не получилось: тогда интерфейс просто
+    предложит все слоты равноправно.
+    """
+    lowered = (name or "").lower()
+    for keywords, slot in _SLOT_RULES:
+        if any(word in lowered for word in keywords):
+            return slot
+    return ""
+
+
 def describe_item(name: str, genre: str = "", note: str = "") -> str:
     """Возвращает описание предмета. Заметка Мастера Игры важнее локальной."""
     name = (name or "").strip()
@@ -129,6 +162,22 @@ def describe_all(player) -> dict:
     names.update(item for item in equipment.values() if item)
 
     return {name: describe_item(name, genre=genre, note=notes.get(name)) for name in names}
+
+
+def slots_all(player) -> dict:
+    """Подходящий слот для каждого предмета игрока (в сумке и в экипировке).
+
+    Интерфейс показывает «Надеть: Шлем» первой кнопкой, поэтому догадка
+    о слоте нужна по каждому названию. Если угадать не удалось — пустая
+    строка, и все слоты предлагаются равноправно.
+    """
+    inventory = list(getattr(player, "inventory", None) or [])
+    equipment = dict(getattr(player, "equipment", None) or {})
+
+    names = {name for name in inventory if name}
+    names.update(item for item in equipment.values() if item)
+
+    return {name: suggest_slot(name) for name in names}
 
 
 def remember(player, name: str, description: str) -> None:

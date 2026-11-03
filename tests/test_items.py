@@ -49,3 +49,22 @@ def test_remember_ignores_empty_values():
     items.remember(player, "Факел", "")
     items.remember(player, "", "что-то")
     assert player.item_notes == {}
+
+
+def test_suggest_slot_by_item_name():
+    assert items.suggest_slot("Кожаный шлем") == "helmet"
+    assert items.suggest_slot("Стальной меч") == "weapon"
+    assert items.suggest_slot("Кольчужная рубаха") == "armor"
+    assert items.suggest_slot("Сапоги путника") == "boots"
+    # Незнакомое название — слот не угадывается.
+    assert items.suggest_slot("Факел") == ""
+
+
+def test_slots_all_covers_bag_and_equipment():
+    player = DummyPlayer()
+    slots = items.slots_all(player)
+
+    assert set(slots) == {"Ржавый кинжал", "Факел", "Стальной меч", "Кожаный шлем"}
+    assert slots["Стальной меч"] == "weapon"
+    assert slots["Кожаный шлем"] == "helmet"
+    assert slots["Факел"] == ""

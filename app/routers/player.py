@@ -50,6 +50,8 @@ def get_player(player_id: int, db: Session = Depends(get_db)):
         for column in database.Player.__table__.columns
     }
     data["item_descriptions"] = items.describe_all(db_player)
+    # Подсказка, в какой слот логичнее надеть предмет (для кнопок в карточке).
+    data["item_slots"] = items.slots_all(db_player)
     return data
 
 @router.post("/{player_id}/name")

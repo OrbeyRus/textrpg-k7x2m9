@@ -382,11 +382,8 @@ async function loadPlayer() {
                 div.innerText = item;
                 div.style.cursor = 'pointer';
                 const desc = descriptions[item];
-                div.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\n${TOUCH_DEVICE ? 'Коснитесь, чтобы надеть' : 'ЛКМ — надеть, ПКМ — выбросить'}`;
-                div.onclick = () => {
-                    const slot = prompt("В какой слот надеть? (weapon, armor, helmet, boots, ring)", "weapon");
-                    if (slot) equipItem(item, slot);
-                };
+                div.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\n${TOUCH_DEVICE ? 'Коснитесь для действий' : 'ЛКМ — надеть, ПКМ — выбросить'}`;
+                div.onclick = () => openBagItem(item);
                 div.oncontextmenu = (e) => {
                     e.preventDefault();
                     if(confirm(`Выбросить ${item}?`)) dropItem(item);
@@ -414,9 +411,9 @@ async function loadPlayer() {
                 const item = eq[type];
                 slot.innerHTML = `<span style="font-size:0.75em; color:#fff; text-align:center; line-height:1.1; word-break:break-word;">${item}</span>`;
                 slot.style.cursor = 'pointer';
-                slot.onclick = () => unequipItem(type);
+                slot.onclick = () => openEquippedItem(type, item);
                 const desc = descriptions[item];
-                slot.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\n${TOUCH_DEVICE ? 'Коснитесь, чтобы снять' : 'ЛКМ — снять'}`;
+                slot.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\n${TOUCH_DEVICE ? 'Коснитесь для действий' : 'ЛКМ — снять'}`;
             } else {
                 slot.innerHTML = iconSlot(type);
                 slot.style.cursor = 'default';
@@ -1038,11 +1035,14 @@ const fx = {
     if (!canvas || REDUCED_MOTION) return;
 
     const ctx = canvas.getContext('2d');
-    const COUNT = 46;
+    // На телефоне частиц меньше и без двойного разрешения: полноэкранная
+    // анимация с градиентами заметно греет устройство и подтормаживает игру.
+    const LIGHT = window.matchMedia('(max-width: 980px), (hover: none)').matches;
+    const COUNT = LIGHT ? 12 : 46;
     let w = 0, h = 0, dpr = 1, particles = [], raf = null;
 
     function resize() {
-        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        dpr = Math.min(window.devicePixelRatio || 1, LIGHT ? 1 : 2);
         w = canvas.clientWidth;
         h = canvas.clientHeight;
         canvas.width = Math.max(1, Math.floor(w * dpr));
@@ -1121,42 +1121,112 @@ document.addEventListener('pointerdown', (e) => {
     ripple.addEventListener('animationend', () => ripple.remove());
 });
 
-// --- Описание предмета на телефоне ---
-// Тап по предмету (сумка/экипировка) показывает описание полосой внизу:
-// подсказки при наведении на узком экране не читаются.
-let itemTipTimer = null;
+// --- Карточка предмета ---
+// Раньше тап по предмету сразу спрашивал слот, а описание удавалось прочитать
+// только после отмены. Теперь сначала показываем название и описание,
+// а действия — отдельными кнопками.
+const EQUIP_SLOTS = [
+    ['weapon', 'Оружие'],
+    ['armor', 'Броня'],
+    ['helmet', 'Шлем'],
+    ['gloves', 'Перчатки'],
+    ['boots', 'Сапоги'],
+    ['cloak', 'Плащ'],
+    ['ring', 'Кольцо'],
+    ['amulet', 'Амулет']
+];
 
-// Полоса описания нужна там же, где скрыты подсказки при наведении:
-// на сенсорных устройствах и на узких экранах.
-function itemTipEnabled() {
-    return TOUCH_DEVICE || window.innerWidth <= 980;
+function slotLabel(slot) {
+    const found = EQUIP_SLOTS.find(pair => pair[0] === slot);
+    return found ? found[1] : slot;
 }
 
 function hideItemTip() {
     const tip = document.getElementById('item-tip');
     if (tip) tip.classList.remove('is-visible');
-    clearTimeout(itemTipTimer);
 }
 
-function showItemTip(text) {
+function showItemTip(name, description, actions) {
     const tip = document.getElementById('item-tip');
-    if (!tip || !text) return;
-    tip.innerText = text;
+    if (!tip) return;
+
+    document.getElementById('item-tip-name').textContent = name || '';
+    document.getElementById('item-tip-desc').textContent = description || '';
+
+    const holder = document.getElementById('item-tip-actions');
+    holder.textContent = '';
+    (actions || []).forEach(action => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'item-tip-btn' + (action.kind ? ' is-' + action.kind : '');
+        btn.textContent = action.label;
+        btn.onclick = () => action.run();
+        holder.appendChild(btn);
+    });
+
     tip.classList.add('is-visible');
-    clearTimeout(itemTipTimer);
-    itemTipTimer = setTimeout(() => tip.classList.remove('is-visible'), 4500);
 }
 
+function itemDescription(item) {
+    const map = (currentPlayer && currentPlayer.item_descriptions) || {};
+    return map[item] || '';
+}
+
+// Предмет из сумки: описание, кнопки слотов и «выбросить».
+function openBagItem(item) {
+    const actions = [];
+    // Слот, угаданный сервером по названию, предлагаем первым.
+    const suggested = ((currentPlayer && currentPlayer.item_slots) || {})[item] || '';
+
+    if (suggested) {
+        actions.push({
+            label: `Надеть: ${slotLabel(suggested)}`,
+            kind: 'primary',
+            run: () => { hideItemTip(); equipItem(item, suggested); }
+        });
+    }
+    EQUIP_SLOTS
+        .filter(pair => pair[0] !== suggested)
+        .forEach(([slot, label]) => {
+            actions.push({
+                label,
+                run: () => { hideItemTip(); equipItem(item, slot); }
+            });
+        });
+    actions.push({
+        label: 'Выбросить',
+        kind: 'drop',
+        run: () => {
+            hideItemTip();
+            if (confirm(`Выбросить ${item}?`)) dropItem(item);
+        }
+    });
+
+    showItemTip(item, itemDescription(item), actions);
+}
+
+// Надетый предмет: описание и «снять».
+function openEquippedItem(slot, item) {
+    showItemTip(item, itemDescription(item), [
+        {
+            label: 'Снять',
+            kind: 'primary',
+            run: () => { hideItemTip(); unequipItem(slot); }
+        }
+    ]);
+}
+
+// Тап вне карточки закрывает её (но не мешает открыть другую).
 document.addEventListener('click', (e) => {
-    if (!itemTipEnabled() || !e.target.closest) {
-        return;
-    }
-    const target = e.target.closest('[data-tip]');
-    if (target) {
-        showItemTip(target.dataset.tip);
-    } else {
-        hideItemTip();
-    }
+    const tip = document.getElementById('item-tip');
+    if (!tip || !tip.classList.contains('is-visible')) return;
+    if (tip.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('.bag-item, .eq-slot')) return;
+    hideItemTip();
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideItemTip();
 });
 
 // Запуск при открытии страницы

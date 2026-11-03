@@ -1,6 +1,7 @@
 /* База: переменные, шрифты, фон, общие элементы. */
 
-@import url('https://fonts.googleapis.com/css2?family=Ruslan+Display&family=Cormorant+Garamond:wght@400;500;600;700&display=swap');
+/* Шрифты встроены в игру (static/fonts/fonts.css) — раньше они тянулись
+   из Google Fonts при каждом запуске, это замедляло старт и ломалось без сети. */
 
 /* ============================================================
    TEXT RPG — оформление «Тёмный фолиант»
