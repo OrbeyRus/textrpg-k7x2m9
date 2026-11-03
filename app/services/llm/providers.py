@@ -79,14 +79,17 @@ PROVIDERS = (
         "label": "proxyapi",
         "free": False,
         "base_url": "https://api.proxyapi.ru/v1/chat/completions",
-        "default_model": "deepseek/deepseek-v3.2",
+        # По умолчанию — быстрая модель без скрытых «размышлений»: отвечает за
+        # 2-3 секунды. Прежний deepseek-v3.2 «думал» и выдавал ответ через 10-22 с.
+        "default_model": "google/gemini-3.5-flash-lite",
         "models": [
+            "google/gemini-3.5-flash-lite",
+            "openai/gpt-4o-mini",
+            "qwen/qwen3.5-flash-20260224",
             "deepseek/deepseek-v3.2",
-            "gpt-4o-mini",
-            "claude-3-5-haiku",
         ],
         "key_url": "https://proxyapi.ru/",
-        "note": "Российский посредник: удобен без VPN, но обычно платный.",
+        "note": "Российский посредник: удобен без VPN, но обычно платный. По умолчанию — быстрая модель.",
     },
     {
         "id": CUSTOM_ID,

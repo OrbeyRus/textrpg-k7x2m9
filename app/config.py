@@ -48,7 +48,7 @@ def _load_env_file() -> None:
 _load_env_file()
 
 PROXYAPI_KEY = os.getenv("PROXYAPI_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "deepseek/deepseek-v3.2")
+LLM_MODEL = os.getenv("LLM_MODEL", "google/gemini-3.5-flash-lite")
 
 # Модель эмбеддингов для поиска по книге (через локальный Ollama).
 # nomic-embed-text слабо различает русский текст — при желании замените на
@@ -63,7 +63,7 @@ DEBUG = os.getenv("DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
 
 # Версия игры. На ПК совпадает с Android-версией из build.gradle.kts.
 # Используется при проверке обновлений на GitHub.
-APP_VERSION = os.getenv("TEXTRPG_VERSION", "1.1.1")
+APP_VERSION = os.getenv("TEXTRPG_VERSION", "1.1.2")
 
 # Каталоги нужны ещё до подключения к базе.
 DATA_DIR.mkdir(parents=True, exist_ok=True)
