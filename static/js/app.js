@@ -5,6 +5,10 @@ let genresCache = [];
 let selectedGenre = null;
 let selectedSecondary = null;
 
+// На телефоне нет «наведения» мышью: подсказки при наведении там не работают
+// и уезжают за край экрана, поэтому описание показываем полосой внизу.
+const TOUCH_DEVICE = window.matchMedia('(hover: none)').matches;
+
 // --- ПОЛЬЗОВАТЕЛЬ ---
 // Токен объединяет сессии одного игрока (нужен для сохранений).
 function ensureUserToken() {
@@ -378,7 +382,7 @@ async function loadPlayer() {
                 div.innerText = item;
                 div.style.cursor = 'pointer';
                 const desc = descriptions[item];
-                div.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\nЛКМ — надеть, ПКМ — выбросить`;
+                div.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\n${TOUCH_DEVICE ? 'Коснитесь, чтобы надеть' : 'ЛКМ — надеть, ПКМ — выбросить'}`;
                 div.onclick = () => {
                     const slot = prompt("В какой слот надеть? (weapon, armor, helmet, boots, ring)", "weapon");
                     if (slot) equipItem(item, slot);
@@ -412,7 +416,7 @@ async function loadPlayer() {
                 slot.style.cursor = 'pointer';
                 slot.onclick = () => unequipItem(type);
                 const desc = descriptions[item];
-                slot.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\nЛКМ — снять`;
+                slot.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\n${TOUCH_DEVICE ? 'Коснитесь, чтобы снять' : 'ЛКМ — снять'}`;
             } else {
                 slot.innerHTML = iconSlot(type);
                 slot.style.cursor = 'default';
@@ -1115,6 +1119,44 @@ document.addEventListener('pointerdown', (e) => {
     ripple.style.top = `${e.clientY - rect.top - size / 2}px`;
     btn.appendChild(ripple);
     ripple.addEventListener('animationend', () => ripple.remove());
+});
+
+// --- Описание предмета на телефоне ---
+// Тап по предмету (сумка/экипировка) показывает описание полосой внизу:
+// подсказки при наведении на узком экране не читаются.
+let itemTipTimer = null;
+
+// Полоса описания нужна там же, где скрыты подсказки при наведении:
+// на сенсорных устройствах и на узких экранах.
+function itemTipEnabled() {
+    return TOUCH_DEVICE || window.innerWidth <= 980;
+}
+
+function hideItemTip() {
+    const tip = document.getElementById('item-tip');
+    if (tip) tip.classList.remove('is-visible');
+    clearTimeout(itemTipTimer);
+}
+
+function showItemTip(text) {
+    const tip = document.getElementById('item-tip');
+    if (!tip || !text) return;
+    tip.innerText = text;
+    tip.classList.add('is-visible');
+    clearTimeout(itemTipTimer);
+    itemTipTimer = setTimeout(() => tip.classList.remove('is-visible'), 4500);
+}
+
+document.addEventListener('click', (e) => {
+    if (!itemTipEnabled() || !e.target.closest) {
+        return;
+    }
+    const target = e.target.closest('[data-tip]');
+    if (target) {
+        showItemTip(target.dataset.tip);
+    } else {
+        hideItemTip();
+    }
 });
 
 // Запуск при открытии страницы

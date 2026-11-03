@@ -15,6 +15,7 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.webkit.ValueCallback
+import android.webkit.JsPromptResult
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -85,6 +86,31 @@ class MainActivity : Activity() {
                         filePathCallback = null
                         false
                     }
+                }
+
+                // window.prompt() в WebView по умолчанию не показывается вовсе —
+                // без этого на телефоне нельзя было выбрать слот для предмета.
+                override fun onJsPrompt(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    defaultValue: String?,
+                    result: JsPromptResult?
+                ): Boolean {
+                    if (result == null) return false
+                    val input = EditText(this@MainActivity).apply {
+                        setText(defaultValue ?: "")
+                        setSingleLine(true)
+                        selectAll()
+                    }
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(message ?: "")
+                        .setView(input)
+                        .setCancelable(false)
+                        .setPositiveButton("ОК") { _, _ -> result.confirm(input.text.toString()) }
+                        .setNegativeButton("Отмена") { _, _ -> result.cancel() }
+                        .show()
+                    return true
                 }
             }
         }
@@ -337,7 +363,7 @@ class MainActivity : Activity() {
 
         // Версия веб-ассетов: меняйте при правках вёрстки/CSS, чтобы WebView
         // не использовал закэшированную страницу.
-        private const val ASSET_VERSION = 4
+        private const val ASSET_VERSION = 5
 
         // Адрес сервера, чтобы не поднимать его повторно после пересоздания Activity.
         @Volatile
