@@ -1,6 +1,103 @@
 let currentPlayer = null;
 let playerId = localStorage.getItem('rpg_player_id');
 const availableAbilities = ["Мощный удар", "Огненный шар", "Лечение", "Скрытность", "Блок щитом"];
+let genresCache = [];
+let selectedGenre = null;
+let selectedSecondary = null;
+
+// --- ЖАНРЫ ---
+async function loadGenres() {
+    try {
+        const response = await fetch('/genres');
+        const data = await response.json();
+        genresCache = data.genres || [];
+        renderGenreGrids();
+    } catch (e) {
+        console.error('Не удалось загрузить жанры:', e);
+    }
+}
+
+function genreName(code) {
+    const found = genresCache.find(g => g.code === code);
+    return found ? found.name : null;
+}
+
+function renderGenreGrids() {
+    const primaryGrid = document.getElementById('genre-grid');
+    const secondaryGrid = document.getElementById('genre-secondary-grid');
+    if (!primaryGrid || !secondaryGrid) return;
+
+    primaryGrid.innerHTML = '';
+    secondaryGrid.innerHTML = '';
+
+    genresCache.forEach(genre => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'genre-card';
+        card.dataset.code = genre.code;
+        card.innerHTML = `<b>${genre.name}</b><span>${genre.description}</span>`;
+        card.onclick = () => selectGenre(genre.code);
+        primaryGrid.appendChild(card);
+    });
+
+    genresCache.forEach(genre => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'genre-chip';
+        chip.dataset.code = genre.code;
+        chip.textContent = genre.name;
+        chip.onclick = () => selectSecondary(genre.code);
+        secondaryGrid.appendChild(chip);
+    });
+
+    refreshGenreSelection();
+}
+
+function selectGenre(code) {
+    selectedGenre = code;
+    if (selectedSecondary === code) selectedSecondary = null;
+    refreshGenreSelection();
+}
+
+function selectSecondary(code) {
+    selectedSecondary = (selectedSecondary === code) ? null : code;
+    refreshGenreSelection();
+}
+
+function refreshGenreSelection() {
+    document.querySelectorAll('#genre-grid .genre-card').forEach(card => {
+        card.classList.toggle('is-selected', card.dataset.code === selectedGenre);
+    });
+    document.querySelectorAll('#genre-secondary-grid .genre-chip').forEach(chip => {
+        chip.classList.toggle('is-selected', chip.dataset.code === selectedSecondary);
+        chip.classList.toggle('is-disabled', chip.dataset.code === selectedGenre);
+    });
+
+    const pickBtn = document.getElementById('book-pick-btn');
+    if (pickBtn) {
+        pickBtn.disabled = !selectedGenre;
+        pickBtn.innerText = selectedGenre
+            ? 'Выбрать файл .txt'
+            : 'Сначала выберите жанр';
+    }
+}
+
+function applyStatLabels(primary, secondary) {
+    const primaryProfile = genresCache.find(g => g.code === primary);
+    let labels = primaryProfile && primaryProfile.stat_labels ? { ...primaryProfile.stat_labels } : null;
+    const secondaryProfile = genresCache.find(g => g.code === secondary);
+    if (secondaryProfile && secondaryProfile.stat_labels) {
+        labels = { ...(labels || {}), ...secondaryProfile.stat_labels };
+    }
+
+    document.querySelectorAll('.stat-row[data-stat]').forEach(row => {
+        const labelEl = row.querySelector('.stat-name');
+        if (!labelEl) return;
+        const base = labelEl.dataset.base || labelEl.innerText;
+        labelEl.innerText = (labels && labels[row.dataset.stat]) || base;
+    });
+}
+
 
 // --- ОНБОРДИНГ ---
 async function createPlayer() {
@@ -31,11 +128,18 @@ async function uploadBook() {
     const file = fileInput.files[0];
     if (!file) return;
 
-    document.getElementById('step-book').querySelector('button').style.display = 'none';
+    if (!selectedGenre) {
+        alert('Сначала выберите жанр книги.');
+        return;
+    }
+
+    document.getElementById('book-pick-btn').style.display = 'none';
     document.getElementById('book-progress').style.display = 'block';
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('genre', selectedGenre);
+    if (selectedSecondary) formData.append('genre_secondary', selectedSecondary);
 
     try {
         const response = await fetch(`/upload_book/${playerId}`, {
@@ -85,6 +189,16 @@ async function loadPlayer() {
         document.getElementById('c-name').innerText = currentPlayer.name;
         document.getElementById('c-level').innerText = currentPlayer.level;
         document.getElementById('c-loc').innerText = currentPlayer.location;
+
+        if (!genresCache.length) await loadGenres();
+
+        const primaryName = genreName(currentPlayer.genre);
+        const secondaryName = currentPlayer.genre_secondary ? genreName(currentPlayer.genre_secondary) : null;
+        const genreLabel = primaryName
+            ? (secondaryName ? `${primaryName} · ${secondaryName}` : primaryName)
+            : '—';
+        document.getElementById('c-genre').innerText = genreLabel;
+        applyStatLabels(currentPlayer.genre, currentPlayer.genre_secondary);
         
         document.getElementById('s-str').innerText = currentPlayer.strength;
         document.getElementById('s-agi').innerText = currentPlayer.agility;
@@ -379,13 +493,17 @@ async function changeBook() {
     document.getElementById('step-name').style.display = 'none';
     stepBook.style.display = 'block';
     
-    stepBook.querySelector('button').style.display = 'none';
+    document.getElementById('book-pick-btn').style.display = 'none';
     const progressDiv = document.getElementById('book-progress');
     progressDiv.style.display = 'block';
     progressDiv.innerText = "Обработка новой книги... Это займет пару минут. Не закрывайте вкладку.";
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('genre', (currentPlayer && currentPlayer.genre) || 'universal');
+    if (currentPlayer && currentPlayer.genre_secondary) {
+        formData.append('genre_secondary', currentPlayer.genre_secondary);
+    }
 
     try {
         const response = await fetch(`/upload_book/${playerId}`, {
@@ -397,7 +515,6 @@ async function changeBook() {
             throw new Error("Ошибка при загрузке книги");
         }
 
-        await fetch(`/reset/${playerId}`);
         location.reload();
         
     } catch (e) {
@@ -693,4 +810,5 @@ document.addEventListener('pointerdown', (e) => {
 });
 
 // Запуск при открытии страницы
+loadGenres();
 loadPlayer();

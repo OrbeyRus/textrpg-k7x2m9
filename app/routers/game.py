@@ -1,40 +1,24 @@
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import database
 from app.config import DEBUG_LOG
+from app.content import genres
 from app.dependencies import get_db
-from app.services import llm, progression, rag
+from app.services import campaign, llm, progression, rag
 
 router = APIRouter(tags=["game"])
 
-@router.get("/book_status")
-def book_status(player_id: int, db: Session = Depends(get_db)):
-    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
-    if not db_player or not db_player.book_file:
-        return {"has_book": False}
-    return {"has_book": True}
-
-@router.post("/upload_book/{player_id}")
-async def upload_book(player_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    return await rag.process_book_upload(file, player_id, db)
 
 @router.get("/reset/{player_id}")
 def reset_player(player_id: int, db: Session = Depends(get_db)):
     db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
     if db_player:
-        db_player.history, db_player.hp, db_player.max_hp = [], 100, 100
-        db_player.level, db_player.xp = progression.START_LEVEL, 0
-        db_player.next_level_xp = progression.xp_to_next(progression.START_LEVEL)
-        db_player.strength, db_player.agility, db_player.vitality = 5, 5, 5
-        db_player.intelligence, db_player.perception, db_player.luck = 5, 5, 5
-        db_player.stat_points = progression.START_STAT_POINTS
-        db_player.ability_points = progression.START_ABILITY_POINTS
-        db_player.inventory, db_player.location = [], "Неизвестно"
-        db_player.quests = []
-        db_player.equipment = {}   
-        db_player.abilities = []   
-        db_player.enemy = {}
+        campaign.start_new_campaign(
+            db_player,
+            db_player.genre or genres.DEFAULT_GENRE,
+            db_player.genre_secondary or None,
+        )
         db.commit()
     return {"status": "ok"}
 
@@ -83,15 +67,30 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
         start_instruction = f"""ЛОР МИРА:
 {lore_context}"""
 
-    prompt = f"""Ты — талантливый писатель и Мастер Игры в мрачном LitRPG.
+    profile = genres.profile_for(
+        db_player.genre or genres.DEFAULT_GENRE,
+        db_player.genre_secondary or None,
+    )
+    stat_labels = profile["stat_labels"]
+    stats_line = ", ".join(
+        f"{stat_labels.get(key, key)} {getattr(db_player, key)}"
+        for key in progression.STAT_KEYS
+    )
+
+    prompt = f"""Ты — талантливый писатель и Мастер Игры.
 {start_instruction}
+
+ЖАНР КАМПАНИИ: {profile['display_name']}
+ТОН ПОВЕСТВОВАНИЯ: {profile['tone']}
+ЧТО СЧИТАЕТСЯ ПРОГРЕССОМ: {profile['progress_hint']}
 
 СОСТОЯНИЕ ИГРОКА:
 Имя: {db_player.name}, HP: {db_player.hp}/{db_player.max_hp}, Локация: {db_player.location}
-Характеристики: Сила {db_player.strength}, Ловкость {db_player.agility}, Живучесть {db_player.vitality}, Интеллект {db_player.intelligence}, Восприятие {db_player.perception}, Удача {db_player.luck}
+Характеристики: {stats_line}
 Экипировка: {db_player.equipment}
 Инвентарь: {db_player.inventory}
 Способности: {db_player.abilities}
+Отношения: {db_player.relationships}
 Активные квесты: {db_player.quests}
 Текущий враг: {db_player.enemy}
 
@@ -105,7 +104,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 4. СИСТЕМА ЭФФЕКТОВ: Ты — игровой движок. Если в мире происходят изменения, ты ОБЯЗАН добавить в самом конце скрытый тег [EFFECTS].
 5. ФОРМАТ ЭФФЕКТОВ: Пиши строго так: [EFFECTS] HP: -5, XP: +20, ITEM: Название, REMOVE_ITEM: Название, LOCATION: Название.
 6. ИСПОЛЬЗОВАНИЕ ПРЕДМЕТОВ: Если игрок отдает или использует предмет — используй ТОЛЬКО REMOVE_ITEM.
-7. Опыт (XP) давай ТОЛЬКО за победу, решение загадки или прогресс. За обычные действия пиши [EFFECTS] NONE.
+7. Опыт (XP) давай за значимый прогресс по жанру: победа или преодоление опасности, важное открытие или разгадка, развитие отношений или доверия, продвижение и завершение квеста. За обычные повторяющиеся действия пиши [EFFECTS] NONE.
 8. КВЕСТЫ: Если игроку дают новое задание, добавь тег: [NEW_QUEST] {{"title": "Название", "description": "Описание", "giver": "Кто дал", "location": "Где"}}. Если игрок выполнил квест, добавь тег: [QUEST_DONE] Название.
 9. ВСЕ ЛОКАЦИИ ПИШИ ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.
 10. ВРАГИ: Если начинается бой, создавай врага тегом: [ENEMY] {{"name": "Имя", "hp": 30}}.

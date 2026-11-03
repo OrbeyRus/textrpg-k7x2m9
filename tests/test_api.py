@@ -30,6 +30,20 @@ def test_unknown_player_returns_404():
     assert response.status_code == 404
 
 
+def test_genres_endpoint_returns_catalog():
+    response = client.get("/genres")
+    assert response.status_code == 200
+    genres = response.json()["genres"]
+    assert len(genres) >= 8
+    assert all("stat_labels" in g for g in genres)
+
+
 def test_stat_whitelist_rejects_non_stats():
     response = client.post("/player/1/upgrade", json={"stat_name": "level"})
+    assert response.status_code in (400, 404)
+
+
+def test_upload_rejects_unknown_genre_before_processing():
+    files = {"file": ("book.txt", b"hello", "text/plain")}
+    response = client.post("/upload_book/1", files=files, data={"genre": "nonsense"})
     assert response.status_code in (400, 404)

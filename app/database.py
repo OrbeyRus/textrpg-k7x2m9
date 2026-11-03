@@ -41,5 +41,16 @@ class Player(Base):
     enemy = Column(JSON, default=dict)
     book_file = Column(String, default="")
 
+    # Жанровая кампания
+    genre = Column(String, default="")
+    genre_secondary = Column(String, default="")
+    genre_weights = Column(JSON, default=dict)
+
+    # События, отношения и способности
+    relationships = Column(JSON, default=dict)
+    xp_ledger = Column(JSON, default=dict)
+    ability_cooldowns = Column(JSON, default=dict)
+    turn = Column(Integer, default=0)
+
 
 Base.metadata.create_all(bind=engine)

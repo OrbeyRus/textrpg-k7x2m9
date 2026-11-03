@@ -7,9 +7,9 @@
     <title>Text RPG — Мир приключений</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="/static/css/base.css?v=1">
-    <link rel="stylesheet" href="/static/css/layout.css?v=1">
-    <link rel="stylesheet" href="/static/css/components.css?v=1">
+    <link rel="stylesheet" href="/static/css/base.css?v=2">
+    <link rel="stylesheet" href="/static/css/layout.css?v=2">
+    <link rel="stylesheet" href="/static/css/components.css?v=2">
 </head>
 <body>
 
@@ -34,9 +34,15 @@
 
             <div id="step-book" class="step" style="display: none;">
                 <p class="step-ok">✓ Герой создан</p>
-                <p class="step-label">Шаг 2. Загрузите книгу в формате .TXT, по лору которой хотите играть.</p>
+                <p class="step-label">Шаг 2. Выберите жанр книги</p>
+                <div id="genre-grid" class="genre-grid"></div>
+
+                <p class="step-label">Дополнительный тон — необязательно</p>
+                <div id="genre-secondary-grid" class="genre-grid genre-grid-secondary"></div>
+
+                <p class="step-label">Шаг 3. Загрузите книгу в формате .TXT, по лору которой хотите играть.</p>
                 <input type="file" id="book-file" accept=".txt" hidden onchange="uploadBook()">
-                <button class="btn-action btn-block" onclick="document.getElementById('book-file').click()">Выбрать файл .txt</button>
+                <button id="book-pick-btn" class="btn-action btn-block" disabled onclick="document.getElementById('book-file').click()">Сначала выберите жанр</button>
                 <div id="book-progress" class="book-progress" style="display: none;">Обработка книги… Это займёт пару минут. Пожалуйста, подождите.</div>
             </div>
         </div>
@@ -50,6 +56,7 @@
             <div class="char-info" id="char-info">
                 <div class="char-row"><span>Имя</span><b id="c-name"></b></div>
                 <div class="char-row"><span>Уровень</span><b id="c-level"></b></div>
+                <div class="char-row"><span>Жанр</span><b id="c-genre">—</b></div>
             </div>
 
             <button class="menu-btn menu-btn-quest" onclick="openQuests()">
@@ -64,12 +71,12 @@
             <h2 style="margin-top: 24px;">Характеристики</h2>
             <div class="points-avail">Доступно очков: <span id="c-points">0</span></div>
             <div class="stats-list">
-                <div class="stat-row"><span class="stat-name">Сила</span> <div><span class="stat-value" id="s-str">5</span><button class="btn-plus" onclick="upgrade('strength')" disabled>+</button></div></div>
-                <div class="stat-row"><span class="stat-name">Ловкость</span> <div><span class="stat-value" id="s-agi">5</span><button class="btn-plus" onclick="upgrade('agility')" disabled>+</button></div></div>
-                <div class="stat-row"><span class="stat-name">Живучесть</span> <div><span class="stat-value" id="s-vit">5</span><button class="btn-plus" onclick="upgrade('vitality')" disabled>+</button></div></div>
-                <div class="stat-row"><span class="stat-name">Интеллект</span> <div><span class="stat-value" id="s-int">5</span><button class="btn-plus" onclick="upgrade('intelligence')" disabled>+</button></div></div>
-                <div class="stat-row"><span class="stat-name">Восприятие</span> <div><span class="stat-value" id="s-per">5</span><button class="btn-plus" onclick="upgrade('perception')" disabled>+</button></div></div>
-                <div class="stat-row"><span class="stat-name">Удача</span> <div><span class="stat-value" id="s-lck">5</span><button class="btn-plus" onclick="upgrade('luck')" disabled>+</button></div></div>
+                <div class="stat-row" data-stat="strength"><span class="stat-name" data-base="Сила">Сила</span> <div><span class="stat-value" id="s-str">5</span><button class="btn-plus" onclick="upgrade('strength')" disabled>+</button></div></div>
+                <div class="stat-row" data-stat="agility"><span class="stat-name" data-base="Ловкость">Ловкость</span> <div><span class="stat-value" id="s-agi">5</span><button class="btn-plus" onclick="upgrade('agility')" disabled>+</button></div></div>
+                <div class="stat-row" data-stat="vitality"><span class="stat-name" data-base="Живучесть">Живучесть</span> <div><span class="stat-value" id="s-vit">5</span><button class="btn-plus" onclick="upgrade('vitality')" disabled>+</button></div></div>
+                <div class="stat-row" data-stat="intelligence"><span class="stat-name" data-base="Интеллект">Интеллект</span> <div><span class="stat-value" id="s-int">5</span><button class="btn-plus" onclick="upgrade('intelligence')" disabled>+</button></div></div>
+                <div class="stat-row" data-stat="perception"><span class="stat-name" data-base="Восприятие">Восприятие</span> <div><span class="stat-value" id="s-per">5</span><button class="btn-plus" onclick="upgrade('perception')" disabled>+</button></div></div>
+                <div class="stat-row" data-stat="luck"><span class="stat-name" data-base="Удача">Удача</span> <div><span class="stat-value" id="s-lck">5</span><button class="btn-plus" onclick="upgrade('luck')" disabled>+</button></div></div>
             </div>
 
             <h2 style="margin-top: 24px;">Способности</h2>
@@ -161,6 +168,6 @@
         </div>
     </div>
 
-    <script src="/static/js/app.js?v=3"></script>
+    <script src="/static/js/app.js?v=4"></script>
 </body>
 </html>

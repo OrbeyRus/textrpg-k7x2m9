@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import database
+from app.content import genres
 from app.dependencies import get_db
 from app.services import llm, progression
 
@@ -17,8 +18,13 @@ def combat_action(player_id: int, action: str = Query(...), db: Session = Depend
     enemy_hp_before = db_player.enemy.get("hp", 0)
     
     weapon = db_player.equipment.get("weapon", "кулаки") if db_player.equipment else "кулаки"
+    profile = genres.profile_for(
+        db_player.genre or genres.DEFAULT_GENRE,
+        db_player.genre_secondary or None,
+    )
     
     prompt = f"""Ты — боевой движок текстовой JRPG. 
+Жанр и тон: {profile['display_name']}. {profile['tone']}.
 Игрок {db_player.name} (HP: {db_player.hp}, Оружие: {weapon}) сражается с {enemy_name} (HP: {enemy_hp_before}).
 Игрок использует действие: {action}.
 
