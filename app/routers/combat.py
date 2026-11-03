@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app import database
 from app.content import genres
 from app.dependencies import get_db
-from app.services import abilities, combat, llm
+from app.services import abilities, combat, gamelog, llm
 
 router = APIRouter(prefix="/combat", tags=["combat"])
 
@@ -48,8 +48,8 @@ def combat_action(player_id: int, action: str = Query(...), db: Session = Depend
 """
 
     try:
-        full_text = llm.call_llm(prompt, max_tokens=300)
-        full_text, effects_list = llm.parse_effects(full_text, db_player)
+        raw_text = llm.call_llm(prompt, max_tokens=300)
+        full_text, effects_list = llm.parse_effects(raw_text, db_player)
         
         # --- ЗАЩИТА ОТ ДУРАКА: числа боя считает сервер ---
         current_enemy_hp = db_player.enemy.get("hp", 0) if db_player.enemy else 0
@@ -78,7 +78,17 @@ def combat_action(player_id: int, action: str = Query(...), db: Session = Depend
 
         # Сохраняем изменения в базу
         db.commit()
-        
+
+        gamelog.log_turn(
+            db_player,
+            "combat_action",
+            action=action,
+            raw=raw_text,
+            text=full_text,
+            effects=effects_list,
+            extra={"enemy": dict(db_player.enemy or {})},
+        )
+
         return {
             "text": full_text, 
             "effects": effects_list,
@@ -120,8 +130,8 @@ def combat_ability(player_id: int, ability_id: str = Query(...), db: Session = D
 [EVENT] type=combat_win, result=success, tier=standard, target="{enemy_name}"
 """
     try:
-        full_text = llm.call_llm(prompt, max_tokens=220)
-        full_text, effects_list = llm.parse_effects(full_text, db_player)
+        raw_text = llm.call_llm(prompt, max_tokens=220)
+        full_text, effects_list = llm.parse_effects(raw_text, db_player)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -131,6 +141,16 @@ def combat_ability(player_id: int, ability_id: str = Query(...), db: Session = D
     history.append(f"Бой: {full_text}")
     db_player.history = history[-15:]
     db.commit()
+
+    gamelog.log_turn(
+        db_player,
+        "combat_ability",
+        action=f"способность «{ability['name']}»",
+        raw=raw_text,
+        text=full_text,
+        effects=effects_list,
+        extra={"enemy": dict(db_player.enemy or {})},
+    )
 
     return {
         "text": full_text,

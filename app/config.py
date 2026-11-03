@@ -18,6 +18,9 @@ INDEX_FILE = BASE_DIR / "index.html"
 DB_PATH = DATA_DIR / "rpg.db"
 DEBUG_LOG = DATA_DIR / "debug.log"
 
+# Автосохранение полного лога игры: по подпапке на каждого персонажа.
+LOGS_DIR = DATA_DIR / "logs"
+
 
 def _load_env_file() -> None:
     """Читает .env без внешних зависимостей, не перетирая уже заданные переменные."""
@@ -52,3 +55,4 @@ DEBUG = os.getenv("DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 BOOKS_DIR.mkdir(parents=True, exist_ok=True)
 SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+LOGS_DIR.mkdir(parents=True, exist_ok=True)

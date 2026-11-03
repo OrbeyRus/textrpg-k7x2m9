@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app import database
 from app.content import genres
 from app.dependencies import get_db
-from app.services import campaign, rag
+from app.services import campaign, gamelog, rag
 
 router = APIRouter(tags=["books"])
 
@@ -44,6 +44,12 @@ async def upload_book(
 
     profile = campaign.start_new_campaign(db_player, genre, genre_secondary or None)
     db.commit()
+
+    gamelog.log_note(
+        db_player,
+        "book",
+        f"Загружена книга «{file.filename}», жанр: {profile['display_name']}",
+    )
 
     return {
         **result,

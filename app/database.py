@@ -38,6 +38,9 @@ class Player(Base):
     history = Column(JSON, default=list)
     location = Column(String, default="Неизвестно")
 
+    # Описания предметов, полученные от Мастера Игры: {"Название": "описание"}.
+    item_notes = Column(JSON, default=dict)
+
     enemy = Column(JSON, default=dict)
     book_file = Column(String, default="")
 
@@ -73,3 +76,27 @@ class GameSave(Base):
 
 
 Base.metadata.create_all(bind=engine)
+
+
+def _ensure_columns() -> None:
+    """Достраивает колонки, появившиеся уже после первого создания базы.
+
+    create_all создаёт только отсутствующие таблицы, но не добавляет поля в
+    существующие. Для SQLite делаем простой ALTER: данных не теряем.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "players" not in inspector.get_table_names():
+        return
+
+    existing = {column["name"] for column in inspector.get_columns("players")}
+    additions = {"item_notes": "JSON"}
+
+    with engine.begin() as connection:
+        for name, ddl in additions.items():
+            if name not in existing:
+                connection.execute(text(f"ALTER TABLE players ADD COLUMN {name} {ddl}"))
+
+
+_ensure_columns()

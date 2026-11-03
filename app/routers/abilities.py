@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app import database
 from app.dependencies import get_db
 from app.schemas import AbilityLearn, UseAbility
-from app.services import abilities, llm
+from app.services import abilities, gamelog, llm
 
 router = APIRouter(prefix="/abilities", tags=["abilities"])
 
@@ -65,11 +65,22 @@ def use_ability(player_id: int, payload: UseAbility, db: Session = Depends(get_d
 [EVENT] type=growth|social|relationship|discovery, result=success, tier=minor|standard, target="объект"
 """
     try:
-        full_text = llm.call_llm(prompt, max_tokens=220)
-        full_text, effects_list = llm.parse_effects(full_text, db_player)
+        raw_text = llm.call_llm(prompt, max_tokens=220)
+        full_text, effects_list = llm.parse_effects(raw_text, db_player)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc))
 
     effects_list = notes + effects_list
     db.commit()
+
+    gamelog.log_turn(
+        db_player,
+        "ability_use",
+        action=f"способность «{ability['name']}»"
+        + (f" → {payload.target}" if payload.target else ""),
+        raw=raw_text,
+        text=full_text,
+        effects=effects_list,
+    )
+
     return {"story": full_text, "effects": effects_list, "ability_points": db_player.ability_points}

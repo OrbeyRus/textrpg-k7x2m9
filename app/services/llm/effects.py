@@ -1,9 +1,21 @@
 import json
 import re
 
-from app.services import abilities, combat, progression, xp
+from app.services import abilities, combat, items, progression, xp
 
 EVENT_RE = re.compile(r'\[EVENT\]\s*([^\n]*)', re.IGNORECASE)
+
+# Ключи эффектов — по ним понимаем, где заканчивается значение предмета
+# (описание может содержать запятые, поэтому резать по первой запятой нельзя).
+_EFFECT_KEY = r'(?:ENEMY_HP|ENEMY_DEAD|REMOVE_ITEM|ITEM|LOCATION|XP|HP|NONE)'
+_ITEM_RE = re.compile(
+    r'(?<![A-Za-z_])ITEM:\s*(.*?)(?=,\s*' + _EFFECT_KEY + r'\s*:|$)',
+    re.IGNORECASE | re.DOTALL,
+)
+_REMOVE_ITEM_RE = re.compile(
+    r'(?<![A-Za-z_])REMOVE_ITEM:\s*(.*?)(?=,\s*' + _EFFECT_KEY + r'\s*:|$)',
+    re.IGNORECASE | re.DOTALL,
+)
 
 # «Сырые» теги эффектов, которые LLM иногда пишет без обёртки [EFFECTS].
 # Нужны, чтобы такие теги всё равно применялись и не утекали в текст рассказа.
@@ -196,21 +208,27 @@ def parse_effects(full_text, db_player, allow_xp=True):
                 effects_list.append(f"❤️ HP: {'+' if val > 0 else ''}{val}")
 
             # Предметы
-            item_match = re.search(r'ITEM:\s*([^\n,]+)', effects_str)
-            remove_match = re.search(r'REMOVE_ITEM:\s*([^\n,]+)', effects_str)
+            item_match = _ITEM_RE.search(effects_str)
+            remove_match = _REMOVE_ITEM_RE.search(effects_str)
             
-            if item_match and remove_match and item_match.group(1).strip().lower() == remove_match.group(1).strip().lower():
-                item_match = None
+            if item_match and remove_match:
+                add_name, _ = items.split_note(item_match.group(1))
+                drop_name, _ = items.split_note(remove_match.group(1))
+                if add_name and add_name.lower() == drop_name.lower():
+                    item_match = None
 
             if item_match:
-                item_name = item_match.group(1).strip()
-                inv = list(db_player.inventory) if db_player.inventory else []
-                inv.append(item_name)
-                db_player.inventory = inv
-                effects_list.append(f"🎒 Получено: {item_name}")
+                item_name, item_note = items.split_note(item_match.group(1))
+                if item_name:
+                    inv = list(db_player.inventory) if db_player.inventory else []
+                    inv.append(item_name)
+                    db_player.inventory = inv
+                    if item_note:
+                        items.remember(db_player, item_name, item_note)
+                    effects_list.append(f"🎒 Получено: {item_name}")
                 
             if remove_match:
-                item_to_remove = remove_match.group(1).strip()
+                item_to_remove, _ = items.split_note(remove_match.group(1))
                 if db_player.inventory and item_to_remove in db_player.inventory:
                     inv = list(db_player.inventory)
                     inv.remove(item_to_remove)

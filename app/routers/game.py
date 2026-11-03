@@ -5,7 +5,7 @@ from app import database
 from app.config import DEBUG, DEBUG_LOG
 from app.content import genres
 from app.dependencies import get_db
-from app.services import abilities, campaign, llm, progression, rag
+from app.services import abilities, campaign, gamelog, llm, progression, rag
 
 router = APIRouter(tags=["game"])
 
@@ -20,6 +20,7 @@ def reset_player(player_id: int, db: Session = Depends(get_db)):
             db_player.genre_secondary or None,
         )
         db.commit()
+        gamelog.log_note(db_player, "reset", "Кампания сброшена до начального состояния")
     return {"status": "ok"}
 
 @router.get("/story/{player_id}")
@@ -122,6 +123,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 3. Объем: 2-3 абзаца (6-10 предложений). Только на русском.
 4. СИСТЕМА ЭФФЕКТОВ: Ты — игровой движок. Если в мире происходят изменения, ты ОБЯЗАН добавить в самом конце скрытый тег [EFFECTS].
 5. ФОРМАТ ЭФФЕКТОВ: Пиши строго так: [EFFECTS] HP: -5, ITEM: Название, REMOVE_ITEM: Название, LOCATION: Название. Опыт в [EFFECTS] НЕ пиши.
+5а. ОПИСАНИЕ ПРЕДМЕТОВ: когда игрок находит вещь, добавь короткое пояснение после названия через тире: ITEM: Название — что это и зачем (до 8 слов, без запятых). Пример: ITEM: Ржавый кинжал — бьёт быстро, но неглубоко.
 6. ИСПОЛЬЗОВАНИЕ ПРЕДМЕТОВ: Если игрок отдает или использует предмет — используй ТОЛЬКО REMOVE_ITEM.
 7. ОПЫТ ЗА СОБЫТИЯ: не пиши числа опыта. Вместо этого добавь с новой строки ОДИН тег события:
    [EVENT] type=ТИП, result=success|partial|fail, tier=minor|standard|major|epic, target="объект"
@@ -162,17 +164,27 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 """
 
     try:
-        full_text = llm.call_llm(prompt)
+        raw_text = llm.call_llm(prompt)
         with open(DEBUG_LOG, "a", encoding="utf-8") as f:
-            f.write(f"\n--- ИГРОК {player_id} ---\n" + full_text + "\n---\n")
+            f.write(f"\n--- ИГРОК {player_id} ---\n" + raw_text + "\n---\n")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    full_text, effects_list = llm.parse_effects(full_text, db_player, allow_xp=not is_start)
+    full_text, effects_list = llm.parse_effects(raw_text, db_player, allow_xp=not is_start)
     db.commit()
 
     history.append(f"Мастер: {full_text}")
     db_player.history = history[-15:]
     db.commit()
-    
+
+    gamelog.log_turn(
+        db_player,
+        "story",
+        action=choice or ("<старт>" if is_start else ""),
+        raw=raw_text,
+        text=full_text,
+        effects=effects_list,
+        extra={"is_start": is_start},
+    )
+
     return {"story": full_text, "effects": effects_list}

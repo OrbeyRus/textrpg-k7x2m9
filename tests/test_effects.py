@@ -13,6 +13,7 @@ class DummyPlayer:
         self.ability_points = 0
         self.inventory = []
         self.equipment = {}
+        self.item_notes = {}
         self.quests = []
         self.location = "Неизвестно"
         self.enemy = {"name": "Гоблин", "hp": 30, "max_hp": 30}
@@ -64,6 +65,19 @@ def test_kill_turn_still_uses_server_incoming_damage():
 
     assert player.enemy == {}
     assert player.hp == player.max_hp - combat.incoming_damage(player, enemy_max)
+
+
+def test_item_note_from_llm_is_saved():
+    player = DummyPlayer()
+    _, effects = llm.parse_effects(
+        "Находишь клинок.\n[EFFECTS] ITEM: Ржавый кинжал — бьёт быстро, но неглубоко",
+        player,
+    )
+
+    # В сумке — чистое название без описания, описание уходит в заметки.
+    assert "Ржавый кинжал" in player.inventory
+    assert player.item_notes["Ржавый кинжал"] == "бьёт быстро, но неглубоко"
+    assert any("Ржавый кинжал" in e for e in effects)
 
 
 def test_event_awards_xp_and_triggers_level_up():

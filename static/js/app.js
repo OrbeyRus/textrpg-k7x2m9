@@ -278,6 +278,9 @@ async function loadPlayer() {
         const hpRatio = currentPlayer.max_hp > 0 ? currentPlayer.hp / currentPlayer.max_hp : 0;
         document.getElementById('hp-bar').parentElement.classList.toggle('is-low', hpRatio > 0 && hpRatio <= 0.3);
 
+        // Описания предметов (и для сумки, и для экипировки).
+        const descriptions = currentPlayer.item_descriptions || {};
+
         // Сумка
         const bag = document.getElementById('bag-container');
         bag.innerHTML = '';
@@ -287,7 +290,8 @@ async function loadPlayer() {
                 div.className = 'bag-item';
                 div.innerText = item;
                 div.style.cursor = 'pointer';
-                div.title = 'ЛКМ - надеть, ПКМ - выбросить';
+                const desc = descriptions[item];
+                div.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\nЛКМ — надеть, ПКМ — выбросить`;
                 div.onclick = () => {
                     const slot = prompt("В какой слот надеть? (weapon, armor, helmet, boots, ring)", "weapon");
                     if (slot) equipItem(item, slot);
@@ -307,23 +311,27 @@ async function loadPlayer() {
         const iconSlot = (type) => `<span class="eq-ico" style="--ico:url('/static/icons/${type}.svg')"></span>`;
         document.querySelectorAll('.eq-slot').forEach(slot => {
             const type = slot.getAttribute('data-type');
-            if (type) {
-                if (eq[type]) {
-                    slot.innerHTML = `<span style="font-size:0.75em; color:#fff; text-align:center; line-height:1.1; word-break:break-word;">${eq[type]}</span>`;
-                    slot.style.cursor = 'pointer';
-                    slot.onclick = () => unequipItem(type);
-                } else {
-                    slot.innerHTML = iconSlot(type);
-                    slot.style.cursor = 'default';
-                    slot.onclick = null;
-                }
-            }
-        });
+            if (!type) return;
 
-        // Красивые подсказки слотов (переносим title в data-tip)
-        document.querySelectorAll('.eq-slot[title]').forEach(slot => {
-            slot.dataset.tip = slot.title;
-            slot.removeAttribute('title');
+            // Подпись пустого слота («Шлем», «Оружие»…) запоминаем один раз.
+            if (!slot.dataset.label) {
+                slot.dataset.label = slot.getAttribute('title') || type;
+                slot.removeAttribute('title');
+            }
+
+            if (eq[type]) {
+                const item = eq[type];
+                slot.innerHTML = `<span style="font-size:0.75em; color:#fff; text-align:center; line-height:1.1; word-break:break-word;">${item}</span>`;
+                slot.style.cursor = 'pointer';
+                slot.onclick = () => unequipItem(type);
+                const desc = descriptions[item];
+                slot.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\nЛКМ — снять`;
+            } else {
+                slot.innerHTML = iconSlot(type);
+                slot.style.cursor = 'default';
+                slot.onclick = null;
+                slot.dataset.tip = slot.dataset.label;
+            }
         });
 
         // Способности

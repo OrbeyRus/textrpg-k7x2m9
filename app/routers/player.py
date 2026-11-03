@@ -11,7 +11,7 @@ from app.schemas import (
     PlayerCreate,
     StatUpgrade,
 )
-from app.services import abilities, progression, saves
+from app.services import abilities, gamelog, items, progression, saves
 
 router = APIRouter(prefix="/player", tags=["player"])
 
@@ -33,13 +33,24 @@ def create_player(player: PlayerCreate, db: Session = Depends(get_db)):
     db.add(db_player)
     db.commit()
     db.refresh(db_player)
+    gamelog.log_note(
+        db_player,
+        "create",
+        f"Создан герой: {db_player.name}" if db_player.name else "Создан герой без имени",
+    )
     return db_player
 
 @router.get("/{player_id}")
 def get_player(player_id: int, db: Session = Depends(get_db)):
     db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
     if not db_player: raise HTTPException(status_code=404, detail="Нет персонажа")
-    return db_player
+    # Полное состояние игрока + описания предметов для интерфейса.
+    data = {
+        column.name: getattr(db_player, column.name)
+        for column in database.Player.__table__.columns
+    }
+    data["item_descriptions"] = items.describe_all(db_player)
+    return data
 
 @router.post("/{player_id}/name")
 def set_player_name(player_id: int, payload: NameUpdate, db: Session = Depends(get_db)):
@@ -52,6 +63,7 @@ def set_player_name(player_id: int, payload: NameUpdate, db: Session = Depends(g
 
     db_player.name = name
     db.commit()
+    gamelog.log_note(db_player, "name", f"Персонаж назван: {name}")
     return {"status": "success", "name": name}
 
 @router.post("/{player_id}/new_game")
@@ -67,6 +79,11 @@ def start_new_game(player_id: int, payload: NewGameRequest = None, db: Session =
     # Снимок текущей сессии: сохраняем, но саму строку игрока не трогаем —
     # это и есть «сохранённая сессия» пользователя.
     saved = saves.create_save(db, db_player, user_token=token)
+    gamelog.log_note(
+        db_player,
+        "new_game",
+        f"Начата новая игра; сессия сохранена (save_id={saved.id})",
+    )
 
     fresh = _fresh_player(token, name="")
     db.add(fresh)
