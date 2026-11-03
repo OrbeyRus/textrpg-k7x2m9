@@ -33,6 +33,10 @@ android/app/build/
 android/captures/
 android/local.properties
 android/app/src/main/python/
+
+# Ключ подписи и пароли к нему — секрет, в публичный репозиторий не попадает.
+android/keystore/
+android/keystore.properties
 *.apk
 *.aab
 *.keystore

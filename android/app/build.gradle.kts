@@ -1,7 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // Kotlin компилирует сам AGP (built-in Kotlin) — отдельный плагин не нужен.
     id("com.chaquo.python")
+}
+
+// Пароли подписи лежат в android/keystore.properties (в git не попадает).
+// Если файла нет (например, при клонировании репозитория), release собирается
+// без подписи, а debug работает как обычно.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -17,13 +29,26 @@ android {
         applicationId = "com.textrpg.app"
         minSdk = 24
         // targetSdk в AGP 9 по умолчанию равен compileSdk — не задаём явно.
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
 
         ndk {
             // arm64-v8a — обычные современные телефоны,
             // x86_64 — эмулятор. Для очень старых устройств можно добавить "armeabi-v7a".
             abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    // Подпись release-сборки постоянным ключом: обновления встают поверх у всех,
+    // кому передан APK. Файл ключа и пароли — в android/keystore* (не в git).
+    signingConfigs {
+        if (keystorePropsFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
         }
     }
 
@@ -34,6 +59,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (keystorePropsFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

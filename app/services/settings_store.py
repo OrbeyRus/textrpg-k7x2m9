@@ -23,7 +23,9 @@ _DEFAULTS = {
     "sound_master": 80,
     "sound_effects": 100,
     "sound_music": 60,
-    "update_repo": "",
+    # Репозиторий обновлений предзаполнен, чтобы игра обновлялась «из коробки»,
+    # в том числе у тех, кому передали файл. Пользователь может его изменить.
+    "update_repo": "OrbeyRus/textrpg-k7x2m9",
     "update_auto": True,
 }
 
