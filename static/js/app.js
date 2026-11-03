@@ -1,6 +1,6 @@
 let currentPlayer = null;
 let playerId = localStorage.getItem('rpg_player_id');
-const availableAbilities = ["Мощный удар", "Огненный шар", "Лечение", "Скрытность", "Блок щитом"];
+let abilitiesCache = [];
 let genresCache = [];
 let selectedGenre = null;
 let selectedSecondary = null;
@@ -327,35 +327,7 @@ async function loadPlayer() {
         });
 
         // Способности
-        const abilityList = document.getElementById('abilities-list');
-        abilityList.innerHTML = '';
-        if (currentPlayer.abilities && currentPlayer.abilities.length > 0) {
-            currentPlayer.abilities.forEach(ab => {
-                const div = document.createElement('div');
-                div.style.cssText = 'background: #2a2a2a; padding: 5px; border-radius: 4px; font-size: 0.9em; border: 1px solid #4CAF50; color: #fff;';
-                div.innerText = ab;
-                abilityList.appendChild(div);
-            });
-        }
-
-        if (currentPlayer.ability_points > 0) {
-            const divider = document.createElement('div');
-            divider.style.cssText = 'margin-top: 10px; font-size: 0.8em; color: #aaa;';
-            divider.innerText = 'Доступно для изучения:';
-            abilityList.appendChild(divider);
-            
-            availableAbilities.forEach(ab => {
-                if (!currentPlayer.abilities || !currentPlayer.abilities.includes(ab)) {
-                    const btn = document.createElement('button');
-                    btn.style.cssText = 'background: #333; color: #ccc; border: 1px solid #555; padding: 5px; border-radius: 4px; font-size: 0.85em; cursor: pointer; text-align: left; margin-top: 5px;';
-                    btn.innerText = `+ ${ab}`;
-                    btn.onclick = () => learnAbility(ab);
-                    abilityList.appendChild(btn);
-                }
-            });
-        } else if (!currentPlayer.abilities || currentPlayer.abilities.length === 0) {
-            abilityList.innerHTML = '<div style="color: #666; font-style: italic; font-size: 0.8em; text-align: center; padding: 10px; border: 1px dashed #333; border-radius: 4px;">Нет изученных способностей</div>';
-        }
+        await refreshAbilities();
 
         // Восстановление сюжета
         const storyDiv = document.getElementById('story');
@@ -409,15 +381,138 @@ async function upgrade(statName) {
     } catch (e) { console.error(e); }
 }
 
-async function learnAbility(abilityName) {
-    if (!currentPlayer || currentPlayer.ability_points <= 0) return;
+async function learnAbility(abilityId) {
     try {
-        const response = await fetch(`/player/${playerId}/learn_ability`, {
+        const response = await fetch(`/abilities/${playerId}/learn`, {
             method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ability_name: abilityName})
+            body: JSON.stringify({ability_id: abilityId})
         });
-        if (response.ok) await loadPlayer();
+        const data = await response.json();
+        if (!response.ok) {
+            alert(data.detail || 'Не удалось изучить способность');
+            return;
+        }
+        await loadPlayer();
     } catch (e) { console.error(e); }
+}
+
+async function useAbility(abilityId) {
+    const ab = abilitiesCache.find(a => a.id === abilityId);
+    let target = '';
+    if (ab && ab.effect === 'charm') {
+        target = (prompt('С кем взаимодействовать?', '') || '').trim();
+    }
+
+    try {
+        const response = await fetch(`/abilities/${playerId}/use`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ability_id: abilityId, target: target})
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            alert(data.detail || 'Не удалось применить способность');
+            return;
+        }
+
+        const storyDiv = document.getElementById('story');
+        const label = ab ? ab.name : 'Способность';
+        if (data.story) {
+            storyDiv.innerHTML = `<div class="past-action">> 📖 ${label}</div><div>${data.story.replace(/\n/g, '<br>')}</div>`;
+        }
+        await loadPlayer();
+        showEffects(data.effects || []);
+    } catch (e) { console.error(e); }
+}
+
+function showEffects(effects) {
+    const log = document.getElementById('effects-log');
+    if (!log) return;
+    log.innerHTML = '';
+    effects.forEach(effect => {
+        const span = document.createElement('span');
+        span.className = 'effect-badge';
+        span.innerText = effect;
+        log.appendChild(span);
+    });
+}
+
+async function refreshAbilities() {
+    if (!playerId) return;
+    try {
+        const response = await fetch(`/abilities/${playerId}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        abilitiesCache = data.abilities || [];
+        renderAbilities();
+        renderCombatAbilities();
+    } catch (e) { console.error('Не удалось загрузить способности:', e); }
+}
+
+function abilityStars(ab) {
+    const filled = '★'.repeat(ab.rank || 0);
+    const empty = '☆'.repeat(Math.max(0, (ab.max_rank || 1) - (ab.rank || 0)));
+    return filled + empty;
+}
+
+function renderAbilities() {
+    const list = document.getElementById('abilities-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!abilitiesCache.length) {
+        list.innerHTML = '<div class="ability-empty">Способности появятся здесь</div>';
+        return;
+    }
+
+    abilitiesCache.forEach(ab => {
+        const card = document.createElement('div');
+        card.className = 'ability-card ' + (ab.learned ? 'is-learned' : 'is-locked') + (ab.source === 'book' ? ' is-book' : '');
+
+        const head = document.createElement('div');
+        head.className = 'ability-head';
+        head.innerHTML = `<b>${ab.name}</b>` + (ab.learned ? `<span class="ability-rank">${abilityStars(ab)}</span>` : '');
+        card.appendChild(head);
+
+        const desc = document.createElement('div');
+        desc.className = 'ability-desc';
+        desc.innerText = ab.description || '';
+        card.appendChild(desc);
+
+        const meta = document.createElement('div');
+        meta.className = 'ability-meta';
+        if (ab.learned) {
+            meta.innerText = ab.cooldown_left > 0
+                ? `Перезарядка: ${ab.cooldown_left}`
+                : `Готово · ранг ${ab.rank}/${ab.max_rank}`;
+        } else {
+            meta.innerText = `Стоимость: ${ab.cost} очк.`;
+        }
+        card.appendChild(meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'ability-actions';
+
+        if (ab.learned && ab.usable && ab.field) {
+            const useBtn = document.createElement('button');
+            useBtn.className = 'ability-btn';
+            useBtn.innerText = 'Использовать';
+            useBtn.onclick = () => useAbility(ab.id);
+            actions.appendChild(useBtn);
+        }
+
+        if (!ab.learned || !ab.maxed) {
+            const learnBtn = document.createElement('button');
+            learnBtn.className = 'ability-btn ability-btn-learn';
+            learnBtn.innerText = ab.learned ? `Улучшить (${ab.cost})` : `Изучить (${ab.cost})`;
+            const points = currentPlayer ? currentPlayer.ability_points : 0;
+            learnBtn.disabled = points < ab.cost;
+            learnBtn.onclick = () => learnAbility(ab.id);
+            actions.appendChild(learnBtn);
+        }
+
+        if (actions.children.length) card.appendChild(actions);
+        list.appendChild(card);
+    });
 }
 
 async function equipItem(itemName, slot) {
@@ -538,6 +633,7 @@ function openCombatScreen(enemy) {
     void screen.offsetWidth;
     screen.classList.add('is-open');
     updateCombatUI(enemy);
+    renderCombatAbilities();
 }
 
 function updateCombatUI(enemy) {
@@ -551,6 +647,76 @@ function updateCombatUI(enemy) {
     document.getElementById('combat-enemy-hp-text').innerText = `${enemy.hp} / ${maxHp} HP`;
     document.getElementById('combat-enemy-hp-bar').style.width = `${Math.max(0, (enemy.hp / maxHp) * 100)}%`;
     document.getElementById('combat-player-hp').innerText = currentPlayer.hp;
+}
+
+async function doCombatAbility(abilityId) {
+    const logDiv = document.getElementById('combat-log');
+    logDiv.innerHTML = "<span style='color: #e0b050;'>Применение способности...</span>";
+
+    document.querySelectorAll('#combat-actions button, #combat-abilities button').forEach(b => b.disabled = true);
+
+    try {
+        const response = await fetch(`/combat/${playerId}/ability?ability_id=${encodeURIComponent(abilityId)}`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            logDiv.innerHTML = `<span style='color: #ff5555;'>${data.detail || 'Не удалось применить способность.'}</span>`;
+            return;
+        }
+
+        if (data.text) {
+            logDiv.innerHTML = data.text.replace(/\n/g, '<br>');
+        }
+        if (data.effects && data.effects.length > 0) {
+            logDiv.innerHTML += '<br>' + data.effects.map(e => `<span class="effect-badge">${e}</span>`).join(' ');
+        }
+
+        await loadPlayer();
+
+        if (data.enemy && data.enemy.hp > 0) {
+            updateCombatUI(data.enemy);
+        } else {
+            setTimeout(() => {
+                logDiv.innerHTML += "<br><br><span style='color: #4CAF50; font-weight: bold;'>Враг повержен! Бой окончен.</span>";
+                setTimeout(closeCombat, 2000);
+            }, 800);
+        }
+
+        if (data.player_hp <= 0) {
+            logDiv.innerHTML += "<br><br><span style='color: #ff3333; font-weight: bold;'>Вы погибли...</span>";
+            setTimeout(() => { location.reload(); }, 3000);
+        }
+    } catch (e) {
+        logDiv.innerHTML = "<span style='color: #ff5555;'>Ошибка боя.</span>";
+    } finally {
+        document.querySelectorAll('#combat-actions button, #combat-abilities button').forEach(b => b.disabled = false);
+        renderCombatAbilities();
+    }
+}
+
+function renderCombatAbilities() {
+    const box = document.getElementById('combat-abilities');
+    if (!box) return;
+
+    const usable = abilitiesCache.filter(a => a.learned && a.combat);
+    if (!usable.length) {
+        box.innerHTML = '';
+        box.style.display = 'none';
+        return;
+    }
+
+    box.style.display = 'flex';
+    box.innerHTML = '';
+    usable.forEach(ab => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-action';
+        btn.innerText = ab.cooldown_left > 0 ? `${ab.name} (${ab.cooldown_left})` : ab.name;
+        btn.disabled = ab.cooldown_left > 0;
+        btn.onclick = () => doCombatAbility(ab.id);
+        box.appendChild(btn);
+    });
 }
 
 async function doCombatAction(actionText) {

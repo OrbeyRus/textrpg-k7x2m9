@@ -1,7 +1,7 @@
 import json
 import re
 
-from app.services import progression, xp
+from app.services import abilities, progression, xp
 
 EVENT_RE = re.compile(r'\[EVENT\]\s*([^\n]*)', re.IGNORECASE)
 
@@ -26,8 +26,9 @@ def _extract_events(full_text: str) -> tuple:
 def parse_effects(full_text, db_player):
     effects_list = []
 
-    # События и состояние врага нужно зафиксировать до его смерти.
+    # События и сюжетные способности вынимаем до остальной обработки.
     events, full_text = _extract_events(full_text)
+    unlocks, full_text = abilities.extract_unlocks(full_text)
     enemy_max_hp = 0
     if db_player.enemy:
         enemy_max_hp = int(db_player.enemy.get("max_hp") or db_player.enemy.get("hp") or 0)
@@ -59,13 +60,21 @@ def parse_effects(full_text, db_player):
             enemy_hp_match = re.search(r'ENEMY_HP:\s*([+-]?\d+)', effects_str)
             if enemy_hp_match and db_player.enemy:
                 val = int(enemy_hp_match.group(1))
-                
+
+                # Прилив сил усиливает урон игрока.
+                if val < 0:
+                    rage = _active_status(db_player, "rage")
+                    if rage:
+                        bonus = int(rage["value"])
+                        val -= bonus
+                        effects_list.append(f"🔥 Прилив сил: +{bonus} к урону")
+
                 # КОСТЫЛЬ ДЛЯ SQLALCHEMY: Пересоздаем словарь, чтобы база увидела изменения
                 new_enemy = dict(db_player.enemy)
                 new_enemy["hp"] = max(0, new_enemy.get("hp", 0) + val)
                 db_player.enemy = new_enemy
                 
-                effects_list.append(f"⚔️ Урон врагу: {val} HP")
+                effects_list.append(f"⚔️ Урон врагу: {-val} HP")
                 
                 # Если враг умер
                 if new_enemy["hp"] <= 0:
@@ -82,6 +91,15 @@ def parse_effects(full_text, db_player):
             hp_match = re.search(r'(?<![A-Za-z_])HP:\s*([+-]?\d+)', effects_str)
             if hp_match: 
                 val = int(hp_match.group(1))
+
+                # Щит гасит часть входящего урона.
+                if val < 0:
+                    guard = _active_status(db_player, "guard")
+                    if guard:
+                        absorbed = min(int(guard["value"]), -val)
+                        val += absorbed
+                        effects_list.append(f"🛡️ Щит поглотил {absorbed} урона")
+
                 db_player.hp = max(0, min(db_player.max_hp, db_player.hp + val))
                 effects_list.append(f"❤️ HP: {'+' if val > 0 else ''}{val}")
 
@@ -159,7 +177,20 @@ def parse_effects(full_text, db_player):
 
     db_player.quests = quests_list
 
-    # 4. Опыт за события (после всех изменений состояния)
+    # 4. Сюжетные способности
+    for unlock in unlocks:
+        granted = abilities.grant(
+            db_player,
+            unlock.get("name"),
+            description=unlock.get("description", ""),
+            effect=unlock.get("effect", "insight"),
+            tier=_to_int(unlock.get("tier"), 2),
+            cooldown=_to_int(unlock.get("cooldown"), 2),
+        )
+        if granted:
+            effects_list.append(f"🌟 Новая способность: {granted['name']}")
+
+    # 5. Опыт за события (после всех изменений состояния)
     if events:
         _, xp_lines = xp.award_events(db_player, events, {"enemy_max_hp": enemy_max_hp})
         effects_list.extend(xp_lines)
@@ -172,3 +203,17 @@ def parse_effects(full_text, db_player):
     # (ENEMY удаляем только если после него нет фигурной скобки {, чтобы не сломать реальные теги врагов)
 
     return full_text, effects_list
+
+
+def _to_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _active_status(player, key: str):
+    status = (getattr(player, "statuses", None) or {}).get(key)
+    if not status or int(status.get("turns", 0)) <= 0 or int(status.get("value", 0)) <= 0:
+        return None
+    return status

@@ -52,6 +52,9 @@ class Player(Base):
     relationships = Column(JSON, default=dict)
     xp_ledger = Column(JSON, default=dict)
     ability_cooldowns = Column(JSON, default=dict)
+    ability_ranks = Column(JSON, default=dict)
+    custom_abilities = Column(JSON, default=dict)
+    statuses = Column(JSON, default=dict)
     turn = Column(Integer, default=0)
 
 

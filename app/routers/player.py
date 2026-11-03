@@ -11,7 +11,7 @@ from app.schemas import (
     PlayerCreate,
     StatUpgrade,
 )
-from app.services import progression, saves
+from app.services import abilities, progression, saves
 
 router = APIRouter(prefix="/player", tags=["player"])
 
@@ -114,15 +114,19 @@ def upgrade_stat(player_id: int, upgrade: StatUpgrade, db: Session = Depends(get
 def learn_ability(player_id: int, ability: AbilityLearn, db: Session = Depends(get_db)):
     db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
     if not db_player: raise HTTPException(status_code=404)
-    if db_player.ability_points > 0:
-        current_abilities = list(db_player.abilities) if db_player.abilities else []
-        if ability.ability_name not in current_abilities:
-            current_abilities.append(ability.ability_name)
-            db_player.abilities = current_abilities
-            db_player.ability_points -= 1
-            db.commit()
-            return {"status": "success", "learned": ability.ability_name}
-    raise HTTPException(status_code=400, detail="Нет очков")
+
+    key = ability.ability_id or ability.ability_name or ""
+    ok, message, view = abilities.learn(db_player, key)
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+
+    db.commit()
+    return {
+        "status": "success",
+        "message": message,
+        "ability": view,
+        "ability_points": db_player.ability_points,
+    }
 
 @router.post("/{player_id}/equip")
 def equip_item(player_id: int, item: EquipItem, db: Session = Depends(get_db)):

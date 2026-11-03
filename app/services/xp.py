@@ -147,6 +147,17 @@ def award_events(player, events: list, context: dict | None = None) -> tuple:
     return total, lines
 
 
+def bump_relationship(player, target: str, tier: str = "standard") -> tuple:
+    """Публичная обёртка: развивает отношения с персонажем. Возвращает (бонус, строка)."""
+    if not target:
+        return 0, ""
+    profile = genres.profile_for(
+        player.genre or genres.DEFAULT_GENRE,
+        player.genre_secondary or None,
+    )
+    return _bump_relationship(player, target, normalize_tier(tier), profile["event_weights"], profile)
+
+
 def _bump_relationship(player, target: str, tier: str, weights: dict, profile: dict) -> tuple:
     """Повышает значение отношений и возвращает бонус за новый этап."""
     relationships = dict(player.relationships or {})

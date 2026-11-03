@@ -42,6 +42,9 @@ def start_new_campaign(player, primary_genre: str, secondary_genre: str | None =
     player.relationships = {}
     player.xp_ledger = {}
     player.ability_cooldowns = {}
+    player.ability_ranks = {}
+    player.custom_abilities = {}
+    player.statuses = {}
     player.turn = 0
 
     return profile

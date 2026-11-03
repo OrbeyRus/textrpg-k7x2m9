@@ -5,7 +5,7 @@ from app import database
 from app.config import DEBUG_LOG
 from app.content import genres
 from app.dependencies import get_db
-from app.services import campaign, llm, progression, rag
+from app.services import abilities, campaign, llm, progression, rag
 
 router = APIRouter(tags=["game"])
 
@@ -26,7 +26,9 @@ def reset_player(player_id: int, db: Session = Depends(get_db)):
 def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(get_db)):
     db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
     if not db_player: raise HTTPException(status_code=404)
-    
+
+    abilities.tick(db_player)
+
     book_data = rag.get_player_book(player_id, db)
     
     history = list(db_player.history) if db_player.history else []
@@ -76,6 +78,8 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
         f"{stat_labels.get(key, key)} {getattr(db_player, key)}"
         for key in progression.STAT_KEYS
     )
+    learned_names = [a["name"] for a in abilities.catalog_view(db_player) if a["learned"]]
+    abilities_line = ", ".join(learned_names) if learned_names else "нет"
 
     prompt = f"""Ты — талантливый писатель и Мастер Игры.
 {start_instruction}
@@ -89,7 +93,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 Характеристики: {stats_line}
 Экипировка: {db_player.equipment}
 Инвентарь: {db_player.inventory}
-Способности: {db_player.abilities}
+Способности: {abilities_line}
 Отношения: {db_player.relationships}
 Активные квесты: {db_player.quests}
 Текущий враг: {db_player.enemy}
@@ -118,6 +122,10 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 15. ФОРМАТИРОВАНИЕ: Каждый тег (LOCATION, ENEMY, EFFECTS) пиши СТРОГО С НОВОЙ СТРОКИ. Никогда не сливай их в одну строку.
 16. ИГРОВЫЕ ЭЛЕМЕНТЫ: Если в книге есть игровой интерфейс (восклицательные знаки, системные окна), используй их, но только для тех персонажей и событий, которые уже произошли в книге. Не выдумывай новых NPC с квестами, если их не было в тексте.
 17. ДЕТАЛИЗАЦИЯ: Описывай не только действия, но и ощущения, запахи, звуки, внутренние мысли героя. Сделай сцену живой и кинематографичной.
+18. СПОСОБНОСТИ ИГРОКА: игрок уже владеет перечисленными способностями — учитывай их, когда он их применяет. Если по сюжету книги герой получает НОВУЮ особую способность, добавь с новой строки тег:
+   [ABILITY_UNLOCK] name="Название", description="что делает", effect=damage|heal|guard|rage|insight|charm|stealth, tier=1|2|3
+   Выдавай такую способность редко и только по значимому сюжетному событию.
+19. ЗАПРЕТ: Никогда не описывай в открытом тексте механику игры (очки, ранги, перезарядки).
 
 ПРИМЕРЫ ПРАВИЛЬНОГО ОТВЕТА:
 Игрок: "Бросаю гранату"

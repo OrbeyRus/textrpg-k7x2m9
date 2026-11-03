@@ -22,6 +22,9 @@ NEW_COLUMNS = {
     "ability_cooldowns": "TEXT DEFAULT '{}'",
     "turn": "INTEGER DEFAULT 0",
     "user_token": "TEXT DEFAULT ''",
+    "ability_ranks": "TEXT DEFAULT '{}'",
+    "custom_abilities": "TEXT DEFAULT '{}'",
+    "statuses": "TEXT DEFAULT '{}'",
 }
 
 

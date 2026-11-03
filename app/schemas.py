@@ -19,7 +19,13 @@ class StatUpgrade(BaseModel):
 
 
 class AbilityLearn(BaseModel):
-    ability_name: str
+    ability_id: str | None = None
+    ability_name: str | None = None
+
+
+class UseAbility(BaseModel):
+    ability_id: str
+    target: str = ""
 
 
 class EquipItem(BaseModel):
