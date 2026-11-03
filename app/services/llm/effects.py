@@ -5,6 +5,35 @@ from app.services import abilities, combat, progression, xp
 
 EVENT_RE = re.compile(r'\[EVENT\]\s*([^\n]*)', re.IGNORECASE)
 
+# «Сырые» теги эффектов, которые LLM иногда пишет без обёртки [EFFECTS].
+# Нужны, чтобы такие теги всё равно применялись и не утекали в текст рассказа.
+_RAW_EFFECT_RE = re.compile(
+    r'(?<![A-Za-z_])(?P<num>ENEMY_HP|HP|XP)\s*:\s*(?P<val>[+-]?\d+)'
+    r'|(?P<dead>ENEMY_DEAD)'
+    r'|(?P<word>REMOVE_ITEM|ITEM|LOCATION)\s*:\s*(?P<text>[^\n,]+)',
+    re.IGNORECASE,
+)
+
+
+def _extract_raw_effects(full_text: str) -> tuple:
+    """Вынимает эффекты без обёртки [EFFECTS] прямо из текста.
+
+    Возвращает (строка эффектов через запятую, очищенный текст).
+    """
+    parts, spans = [], []
+    for match in _RAW_EFFECT_RE.finditer(full_text):
+        spans.append(match.span())
+        if match.group("num"):
+            parts.append(f"{match.group('num').upper()}: {match.group('val')}")
+        elif match.group("dead"):
+            parts.append("ENEMY_DEAD")
+        else:
+            parts.append(f"{match.group('word').upper()}: {match.group('text').strip()}")
+
+    for start, end in reversed(spans):
+        full_text = full_text[:start] + full_text[end:]
+    return ", ".join(parts), full_text.strip()
+
 
 def _parse_event_line(line: str) -> dict:
     event = {}
@@ -103,10 +132,14 @@ def parse_effects(full_text, db_player, allow_xp=True):
     
     # 2. Обработка эффектов (урон врагу, смерть)
     effects_match = re.search(r'\[EFFECTS\](.*?)(?:\n|$)', full_text, re.IGNORECASE | re.DOTALL)
-    if effects_match:
-        effects_str = effects_match.group(1).strip()
-        full_text = full_text.replace(effects_match.group(0), '').strip()
-        
+    if effects_match or _RAW_EFFECT_RE.search(full_text):
+        if effects_match:
+            effects_str = effects_match.group(1).strip()
+            full_text = full_text.replace(effects_match.group(0), '').strip()
+        else:
+            # LLM забыла тег [EFFECTS] — забираем сырые теги из текста.
+            effects_str, full_text = _extract_raw_effects(full_text)
+
         if "NONE" not in effects_str.upper():
             # Урон врагу
             enemy_hp_match = re.search(r'ENEMY_HP:\s*([+-]?\d+)', effects_str)
@@ -147,7 +180,8 @@ def parse_effects(full_text, db_player, allow_xp=True):
                 val = int(hp_match.group(1))
 
                 # Урон врага считает сервер: сила врага, жанр и защита игрока.
-                if val < 0 and db_player.enemy:
+                # Берём и prev_enemy: враг мог погибнуть в этом же ходу.
+                if val < 0 and (db_player.enemy or prev_enemy):
                     val = -combat.incoming_damage(db_player, enemy_max_hp)
 
                 # Щит гасит часть входящего урона.
@@ -276,6 +310,16 @@ def parse_effects(full_text, db_player, allow_xp=True):
     full_text = re.sub(r'\[LOCATION\]\s*', '', full_text)
     full_text = re.sub(r'\[ENEMY\](?!\s*\{)', '', full_text) 
     # (ENEMY удаляем только если после него нет фигурной скобки {, чтобы не сломать реальные теги врагов)
+
+    # Подчищаем «сырые» обрывки эффектов, если они всё же уцелели в прозе.
+    full_text = re.sub(r'(?<![A-Za-z_])(?:ENEMY_HP|XP|HP)\s*:\s*[+-]?\d+', '', full_text)
+    full_text = re.sub(r'(?<![A-Za-z_])ENEMY_DEAD\b', '', full_text)
+    full_text = re.sub(r'(?<![A-Za-z_])(?:REMOVE_ITEM|ITEM|LOCATION)\s*:\s*[^\n,]+', '', full_text)
+    # Убираем осевшие разделители и задвоенную пунктуацию от вырезанных тегов.
+    full_text = re.sub(r'[ \t]*,[ \t]*(?=[,.;:!?]|$)', '', full_text)
+    full_text = re.sub(r'([.,!?])\1+', r'\1', full_text)
+    full_text = re.sub(r'[ \t]{2,}', ' ', full_text)
+    full_text = re.sub(r'\s+([.,!?;:])', r'\1', full_text).strip()
 
     return full_text, effects_list
 

@@ -38,6 +38,34 @@ def test_enemy_damage_does_not_hurt_player():
     assert any("Урон врагу" in e for e in effects)
 
 
+def test_raw_effects_without_wrapper_are_applied_and_stripped():
+    player = DummyPlayer()
+    text, effects = llm.parse_effects(
+        "Ты бьёшь изо всех сил. ENEMY_HP: -10 HP: -8 ENEMY_DEAD ITEM: Клык тени",
+        player,
+    )
+
+    assert "ENEMY_HP" not in text
+    assert "ENEMY_DEAD" not in text
+    assert "ITEM:" not in text
+    assert "Клык тени" in player.inventory
+    assert player.enemy == {}
+
+
+def test_kill_turn_still_uses_server_incoming_damage():
+    player = DummyPlayer()
+    enemy_max = player.enemy["max_hp"]
+
+    # Враг погибает в этом же ходу, но урон игроку всё равно серверный,
+    # а не «-999» от модели.
+    _, effects = llm.parse_effects(
+        "Добиваю врага.\n[EFFECTS] ENEMY_HP: -999, ENEMY_DEAD, HP: -999", player
+    )
+
+    assert player.enemy == {}
+    assert player.hp == player.max_hp - combat.incoming_damage(player, enemy_max)
+
+
 def test_event_awards_xp_and_triggers_level_up():
     player = DummyPlayer()
     player.xp = 90
