@@ -42,6 +42,9 @@
 
 html, body { min-height: 100%; }
 
+/* Базовый размер шрифта игры. rem считаются от html, em — от body. */
+html { font-size: 18px; }
+
 body {
     margin: 0;
     padding: 26px 22px 40px;
@@ -59,7 +62,7 @@ body {
     background-attachment: fixed;
     color: var(--text);
     font-family: var(--font-body);
-    font-size: 17px;
+    font-size: 19px;
     letter-spacing: 0.01em;
     overflow-x: hidden;
 }

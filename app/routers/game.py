@@ -151,7 +151,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    full_text, effects_list = llm.parse_effects(full_text, db_player)
+    full_text, effects_list = llm.parse_effects(full_text, db_player, allow_xp=not is_start)
     db.commit()
 
     history.append(f"Мастер: {full_text}")

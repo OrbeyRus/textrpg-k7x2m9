@@ -23,7 +23,7 @@ def _extract_events(full_text: str) -> tuple:
     return [e for e in events if e.get("type")], cleaned
 
 
-def parse_effects(full_text, db_player):
+def parse_effects(full_text, db_player, allow_xp=True):
     effects_list = []
 
     # События и сюжетные способности вынимаем до остальной обработки.
@@ -139,7 +139,7 @@ def parse_effects(full_text, db_player):
                 effects_list.append(f"📍 Локация: {loc_name}")
 
             # Старый тег опыта: совместимость, но с потолком.
-            if not events:
+            if not events and allow_xp:
                 xp_match = re.search(r'(?<![A-Za-z_])XP:\s*([+-]?\d+)', effects_str)
                 if xp_match:
                     xp_gained = xp.clamp_legacy_xp(int(xp_match.group(1)))
@@ -191,9 +191,20 @@ def parse_effects(full_text, db_player):
             effects_list.append(f"🌟 Новая способность: {granted['name']}")
 
     # 5. Опыт за события (после всех изменений состояния)
-    if events:
+    if events and allow_xp:
         _, xp_lines = xp.award_events(db_player, events, {"enemy_max_hp": enemy_max_hp})
         effects_list.extend(xp_lines)
+
+    # 6. Победа в бою закрывает врага, даже если LLM забыл прислать ENEMY_DEAD.
+    if db_player.enemy:
+        won = any(
+            (e.get("type") or "").strip().lower() == "combat_win"
+            and (e.get("result") or "success").strip().lower() != "fail"
+            for e in events
+        )
+        if won:
+            effects_list.append(f"💀 Враг {db_player.enemy.get('name', '?')} повержен!")
+            db_player.enemy = {}
 
 # --- ЧИСТИЛЬЩИК ТЕГОВ ---
     # Удаляем ошибочно оставленные теги из текста (например, [LOCATION] Улица)

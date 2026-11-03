@@ -59,6 +59,27 @@ def test_combat_win_scales_with_enemy_hp():
     assert any("Победа" in e for e in effects)
 
 
+def test_combat_win_clears_enemy_without_enemy_dead():
+    player = DummyPlayer()
+    _, effects = llm.parse_effects(
+        "Победа.\n[EFFECTS] NONE\n[EVENT] type=combat_win, result=success, tier=standard, target=\"Гоблин\"",
+        player,
+    )
+    assert player.enemy == {}
+    assert any("повержен" in e for e in effects)
+
+
+def test_start_does_not_award_xp():
+    player = DummyPlayer()
+    _, effects = llm.parse_effects(
+        "Начало.\n[EFFECTS] NONE\n[EVENT] type=discovery, result=success, tier=standard, target=\"дом\"",
+        player,
+        allow_xp=False,
+    )
+    assert player.xp == 0
+    assert not any("XP" in e for e in effects)
+
+
 def test_repeated_event_loses_value():
     player = DummyPlayer()
     event = [{"type": "social", "result": "success", "tier": "standard", "target": "Марта"}]
