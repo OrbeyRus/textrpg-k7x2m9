@@ -1,10 +1,14 @@
 import json
 import math
+import os
 import re
+import threading
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 # numpy нужен только для быстрого косинуса, когда доступны эмбеддинги (десктоп).
 # На Android numpy не нужен: эмбеддингов там нет, а без него обходимся обычной
@@ -17,6 +21,69 @@ except Exception:  # pragma: no cover - зависит от окружения
 from app import database
 from app.config import BOOKS_DIR, DEBUG
 from app.services import embeddings
+
+# Сколько кусков книги отправлять в Ollama одновременно. На десктопе это
+# заметно ускоряет обработку большой книги (раньше куски шли строго по одному).
+EMBED_WORKERS = max(1, int(os.getenv("EMBED_WORKERS", "6")))
+
+# Прогресс обработки книги по каждому игроку. Телефон опрашивает его, чтобы
+# показать «идёт обработка, N%» вместо бесконечного ожидания.
+_PROGRESS: dict = {}
+_PROGRESS_LOCK = threading.Lock()
+
+
+def _set_progress(player_id: int, **fields) -> None:
+    with _PROGRESS_LOCK:
+        state = _PROGRESS.setdefault(player_id, {})
+        state.update(fields)
+
+
+def get_progress(player_id: int):
+    """Снимок прогресса обработки книги или None, если обработки не было."""
+    with _PROGRESS_LOCK:
+        state = _PROGRESS.get(player_id)
+        return dict(state) if state else None
+
+
+def _build_book_data(text: str, player_id: int, use_embeddings: bool) -> list:
+    """Нарезает книгу на куски и (опционально) считает эмбеддинги.
+
+    Функция синхронная и рассчитана на запуск в отдельном потоке: на телефоне
+    она не должна занимать event loop сервера.
+    """
+    chunks = [c for c in split_text(text) if c.strip()]
+    total = len(chunks)
+    _set_progress(player_id, stage="chunks", done=0, total=total, percent=5, error=None)
+
+    if not use_embeddings:
+        data = [{"text": c} for c in chunks]
+        _set_progress(player_id, stage="saving", done=total, total=total, percent=90)
+        return data
+
+    data = [None] * total
+    counter = {"done": 0}
+    counter_lock = threading.Lock()
+
+    def embed_one(index: int) -> None:
+        item = {"text": chunks[index]}
+        try:
+            item["embedding"] = embeddings.embed(chunks[index])
+        except Exception as e:  # ошибку Ollama покажем наверху
+            raise RuntimeError(f"Ошибка Ollama: {e}")
+        data[index] = item
+        with counter_lock:
+            counter["done"] += 1
+            done = counter["done"]
+        percent = 5 + int(85 * done / total) if total else 90
+        _set_progress(player_id, stage="embedding", done=done, total=total, percent=percent)
+
+    if total:
+        with ThreadPoolExecutor(max_workers=min(EMBED_WORKERS, total)) as pool:
+            list(pool.map(embed_one, range(total)))
+
+    _set_progress(player_id, stage="saving", done=total, total=total, percent=90)
+    return data
+
 
 def split_text(text, chunk_size=1000, overlap=200):
     chunks = []
@@ -207,7 +274,8 @@ async def process_book_upload(file: UploadFile, player_id: int, db):
     db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
     if not db_player: raise HTTPException(status_code=404, detail="Игрок не найден")
 
-    if not file.filename.endswith('.txt'):
+    filename = file.filename or ""
+    if not filename.lower().endswith('.txt'):
         raise HTTPException(status_code=400, detail="Только .txt файлы")
 
     book_filename = f"book_{player_id}.json"
@@ -217,33 +285,31 @@ async def process_book_upload(file: UploadFile, player_id: int, db):
     # а поиск идёт по словам (BM25).
     use_embeddings = embeddings.available()
 
+    _set_progress(player_id, stage="reading", done=0, total=0, percent=2, error=None)
     try:
         content = await file.read()
         text = content.decode('utf-8', errors='ignore')
-        chunks = split_text(text)
+        _set_progress(player_id, stage="splitting", percent=5)
 
-        new_book_data = []
-        for i, chunk in enumerate(chunks):
-            if not chunk.strip(): continue
-            if DEBUG:
-                print(f"Обработка куска {i+1} из {len(chunks)}...")
-            item = {"text": chunk}
-            if use_embeddings:
-                try:
-                    item["embedding"] = embeddings.embed(chunk)
-                except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"Ошибка Ollama: {e}")
-            new_book_data.append(item)
+        # Нарезка и эмбеддинги — в отдельном потоке, чтобы не блокировать
+        # event loop: иначе на телефоне встаёт и интерфейс, и опрос прогресса.
+        new_book_data = await run_in_threadpool(_build_book_data, text, player_id, use_embeddings)
 
         with open(book_path, "w", encoding="utf-8") as f:
             json.dump(new_book_data, f, ensure_ascii=False)
 
         db_player.book_file = book_filename
         db.commit()
+        _set_progress(
+            player_id, stage="done", percent=100,
+            done=len(new_book_data), total=len(new_book_data),
+        )
         return {"status": "success", "chunks": len(new_book_data), "embeddings": use_embeddings}
-    except HTTPException:
+    except HTTPException as e:
+        _set_progress(player_id, stage="error", error=str(e.detail))
         raise
     except Exception as e:
         if DEBUG:
             print(f"КРИТИЧЕСКАЯ ОШИБКА: {e}")
+        _set_progress(player_id, stage="error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))

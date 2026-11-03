@@ -172,9 +172,25 @@ async function startNewGame() {
     }
 }
 
+// --- ЗАГРУЗКА КНИГИ ---
+// Человеко-понятные названия этапов обработки (их отдаёт сервер).
+const UPLOAD_STAGES = {
+    reading: 'Читаю файл…',
+    splitting: 'Разбиваю книгу на части…',
+    chunks: 'Готовлю текст…',
+    embedding: 'Считаю смысловые векторы…',
+    saving: 'Сохраняю книгу…',
+    done: 'Готово!',
+    error: 'Ошибка'
+};
+
+function formatMb(bytes) {
+    return (bytes / 1024 / 1024).toFixed(1) + ' МБ';
+}
+
 async function uploadBook() {
     const fileInput = document.getElementById('book-file');
-    const file = fileInput.files[0];
+    const file = fileInput.files && fileInput.files[0];
     if (!file) return;
 
     if (!selectedGenre) {
@@ -182,28 +198,99 @@ async function uploadBook() {
         return;
     }
 
-    document.getElementById('book-pick-btn').style.display = 'none';
-    document.getElementById('book-progress').style.display = 'block';
+    const pickBtn = document.getElementById('book-pick-btn');
+    const progressEl = document.getElementById('book-progress');
+    pickBtn.style.display = 'none';
+    progressEl.style.display = 'block';
+    progressEl.style.whiteSpace = 'pre-line';
+
+    const startedAt = Date.now();
+    let lastPercent = -1;
+    let lastStage = 'reading';
+
+    function paint(percent, stageName) {
+        const seconds = Math.round((Date.now() - startedAt) / 1000);
+        const label = UPLOAD_STAGES[stageName] || 'Обработка книги…';
+        let text = label;
+        if (percent >= 0) text += ` ${percent}%`;
+        text += `\nКнига: ${formatMb(file.size)} · прошло ${seconds} с`;
+        if (stageName === 'error') {
+            text = `${label}\nПопробуйте ещё раз или возьмите файл поменьше.`;
+        } else if (percent < 0 && seconds > 45) {
+            text += '\nОтправляю файл на сервер — жду ответа…';
+        }
+        progressEl.innerText = text;
+    }
+
+    function resetUi() {
+        pickBtn.style.display = '';
+        progressEl.style.display = 'none';
+    }
+
+    paint(-1, lastStage);
+
+    // Пока идёт обработка, показываем, на каком этапе сервер.
+    const timer = setInterval(async () => {
+        paint(lastPercent, lastStage);
+        try {
+            const response = await fetch(`/upload_progress/${playerId}`);
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data.percent != null) {
+                lastPercent = data.percent;
+                lastStage = data.stage || lastStage;
+                paint(lastPercent, lastStage);
+            }
+        } catch (e) {
+            // Сервер занят обработкой — просто ждём следующего опроса.
+        }
+    }, 700);
 
     const formData = new FormData();
     formData.append('file', file);
     formData.append('genre', selectedGenre);
     if (selectedSecondary) formData.append('genre_secondary', selectedSecondary);
 
+    let stalled = false;
+    const stallWatch = setTimeout(() => {
+        // Файл так и не дошёл до сервера: вероятно, WebView завис на чтении
+        // файла. Прерываем и говорим об этом честно, вместо вечного ожидания.
+        if (lastPercent < 0) stalled = true;
+    }, 120000);
+
     try {
         const response = await fetch(`/upload_book/${playerId}`, {
             method: 'POST',
             body: formData
         });
+        clearInterval(timer);
+        clearTimeout(stallWatch);
+
         if (response.ok) {
+            progressEl.innerText = 'Книга загружена! Открываю…';
             location.reload();
-        } else {
-            alert("Ошибка при загрузке книги.");
-            location.reload();
+            return;
         }
+
+        let detail = '';
+        try {
+            const err = await response.json();
+            if (err.detail) detail = `\n${err.detail}`;
+        } catch (e) { /* ответ без JSON */ }
+        alert(`Не удалось обработать книгу (код ${response.status}).${detail}`);
+        resetUi();
     } catch (e) {
-        alert("Ошибка сети при загрузке книги.");
-        location.reload();
+        clearInterval(timer);
+        clearTimeout(stallWatch);
+        if (stalled) {
+            alert(
+                'Файл не удалось отправить на сервер за 2 минуты.\n' +
+                'Попробуйте выбрать файл заново или взять книгу меньшего размера.'
+            );
+        } else {
+            alert(`Ошибка сети при загрузке книги: ${e.message}`);
+        }
+        resetUi();
     }
 }
 

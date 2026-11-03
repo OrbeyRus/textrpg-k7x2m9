@@ -23,6 +23,15 @@ def book_status(player_id: int, db: Session = Depends(get_db)):
     return {"has_book": True}
 
 
+@router.get("/upload_progress/{player_id}")
+def upload_progress(player_id: int):
+    """Прогресс обработки книги (опрашивается интерфейсом во время загрузки)."""
+    state = rag.get_progress(player_id)
+    if not state:
+        return {"active": False}
+    return {"active": state.get("stage") not in ("done", "error"), **state}
+
+
 @router.post("/upload_book/{player_id}")
 async def upload_book(
     player_id: int,

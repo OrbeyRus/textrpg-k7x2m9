@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -22,6 +23,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import java.io.File
 
 /**
  * Единственный экран приложения.
@@ -67,7 +69,9 @@ class MainActivity : Activity() {
                 ): Boolean {
                     filePathCallback?.onReceiveValue(null)
                     filePathCallback = callback
-                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    // ACTION_OPEN_DOCUMENT надёжнее GET_CONTENT: провайдер отдаёт
+                    // стабильный URI, который мы сами прочитаем и скопируем.
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
                     }
@@ -247,17 +251,77 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == REQUEST_FILE) {
-            val result = if (resultCode == RESULT_OK && data?.data != null) {
-                arrayOf(data.data!!)
-            } else {
-                null
-            }
-            filePathCallback?.onReceiveValue(result)
+            val callback = filePathCallback
             filePathCallback = null
+            if (callback == null) {
+                super.onActivityResult(requestCode, resultCode, data)
+                return
+            }
+
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null) {
+                callback.onReceiveValue(null)
+                return
+            }
+
+            // Копируем выбранный файл в кэш приложения и отдаём WebView обычный
+            // путь к файлу. Так загрузка не зависит от того, как ведёт себя
+            // конкретный файловый провайдер телефона (на MIUI бывали зависания).
+            Thread {
+                val local = try {
+                    copyToCache(uri)
+                } catch (e: Exception) {
+                    null
+                }
+                runOnUiThread {
+                    if (local != null) {
+                        callback.onReceiveValue(arrayOf(local))
+                    } else {
+                        // Резервный путь: пробуем отдать исходный URI как есть.
+                        Toast.makeText(
+                            this,
+                            "Не удалось подготовить файл, пробую напрямую…",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        callback.onReceiveValue(arrayOf(uri))
+                    }
+                }
+            }.start()
             return
         }
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    /** Читает выбранный документ и кладёт его копию в кэш приложения. */
+    private fun copyToCache(uri: Uri): Uri? {
+        val dir = File(cacheDir, "uploads")
+        dir.mkdirs()
+        // Прошлые книги не копим — телефону и так тесно.
+        dir.listFiles()?.forEach { it.delete() }
+
+        var name = "book.txt"
+        try {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) {
+                    val display = cursor.getString(index)
+                    if (!display.isNullOrBlank()) name = display
+                }
+            }
+        } catch (e: Exception) {
+            // Не критично: имя можно и не узнать.
+        }
+
+        val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val fileName = if (safe.lowercase().endsWith(".txt")) safe else "book.txt"
+        val target = File(dir, fileName)
+
+        contentResolver.openInputStream(uri)?.use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        } ?: return null
+
+        return if (target.exists() && target.length() > 0) Uri.fromFile(target) else null
     }
 
     override fun onDestroy() {
@@ -273,7 +337,7 @@ class MainActivity : Activity() {
 
         // Версия веб-ассетов: меняйте при правках вёрстки/CSS, чтобы WebView
         // не использовал закэшированную страницу.
-        private const val ASSET_VERSION = 3
+        private const val ASSET_VERSION = 4
 
         // Адрес сервера, чтобы не поднимать его повторно после пересоздания Activity.
         @Volatile
