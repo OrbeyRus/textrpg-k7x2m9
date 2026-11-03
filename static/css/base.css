@@ -134,12 +134,12 @@ body::after {
    На планшетах и телефонах поднимаем общий кегль: почти все размеры
    заданы в rem/em, поэтому они масштабируются вместе с базой. */
 @media (max-width: 980px) {
-    html { font-size: 20px; }
-    body { font-size: 21px; }
+    html { font-size: 22px; }
+    body { font-size: 22px; }
 }
 
 @media (max-width: 620px) {
-    html { font-size: 22px; }
-    body { font-size: 23px; }
+    html { font-size: 25px; }
+    body { font-size: 25px; }
 }
 

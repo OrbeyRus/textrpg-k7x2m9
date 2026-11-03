@@ -15,6 +15,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -50,8 +51,13 @@ class MainActivity : Activity() {
             settings.allowFileAccess = true
             settings.allowContentAccess = true
             settings.useWideViewPort = true
-            settings.loadWithOverviewMode = true
+            // Без этого WebView может «отзумить» страницу и уменьшить весь текст.
+            settings.loadWithOverviewMode = false
             settings.mediaPlaybackRequiresUserGesture = false
+            // Интерфейс лежит локально: кэш не нужен, а после обновления APK
+            // он подсовывает старые index.html и CSS. Отключаем начисто.
+            @Suppress("DEPRECATION")
+            settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
             webChromeClient = object : WebChromeClient() {
                 override fun onShowFileChooser(
@@ -129,7 +135,7 @@ class MainActivity : Activity() {
     /** Запускает сервер (однократно) и открывает игру. */
     private fun startServerAndLoad() {
         serverUrl?.let {
-            webView.loadUrl(it)
+            loadGame(it)
             return
         }
 
@@ -150,7 +156,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 if (url != null) {
                     serverUrl = url
-                    webView.loadUrl(url)
+                    loadGame(url)
                 } else {
                     Toast.makeText(
                         this,
@@ -160,6 +166,16 @@ class MainActivity : Activity() {
                 }
             }
         }.start()
+    }
+
+    /**
+     * Открывает игру с гарантированно свежей вёрсткой: чистит кэш WebView и
+     * добавляет версию ассетов в URL, чтобы не осталось старой страницы.
+     */
+    private fun loadGame(url: String) {
+        webView.clearCache(true)
+        val sep = if (url.contains('?')) '&' else '?'
+        webView.loadUrl("$url${sep}v=$ASSET_VERSION")
     }
 
     private fun showLoading() {
@@ -254,6 +270,10 @@ class MainActivity : Activity() {
         private const val KEY_API = "proxy_api_key"
         private const val REQUEST_FILE = 1001
         private const val MENU_API_KEY = 1
+
+        // Версия веб-ассетов: меняйте при правках вёрстки/CSS, чтобы WebView
+        // не использовал закэшированную страницу.
+        private const val ASSET_VERSION = 2
 
         // Адрес сервера, чтобы не поднимать его повторно после пересоздания Activity.
         @Volatile
