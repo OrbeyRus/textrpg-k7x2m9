@@ -37,17 +37,45 @@ Kotlin (MainActivity) ──► Chaquopy запускает Python-сервер 
 
 ---
 
+## Версии инструментов
+
+Проект настроен под свежий Android Studio, где Gradle работает на **JDK 25**:
+
+| Что | Версия | Где задано |
+|---|---|---|
+| Android Gradle Plugin (AGP) | 9.3.3 | `build.gradle.kts` |
+| Gradle | 9.5.0 | `gradle/wrapper/gradle-wrapper.properties` |
+| Chaquopy | 17.2.0 | `build.gradle.kts` |
+| compileSdk / targetSdk | 37 (Android 17) | `app/build.gradle.kts` |
+| minSdk | 24 | `app/build.gradle.kts` |
+| Build Tools | 36.0.0 | ставит Android Studio |
+| JDK | 25 (встроен в Studio) | Studio |
+| Python (сборка) | 3.11 | `app/build.gradle.kts` |
+
+Особенности AGP 9, из-за которых конфиг выглядит так:
+
+- **Kotlin встроен в AGP.** Плагин `org.jetbrains.kotlin.android` не нужен —
+  наоборот, он ломает синхронизацию. Поэтому в `build.gradle.kts` он не указан,
+  а устаревший блок `kotlinOptions` убран (jvmTarget берётся из `compileOptions`).
+- **`compileSdk` задаётся блоком**: `compileSdk { version = release(37) }`,
+  а не `compileSdk = 37`.
+
 ## Что понадобится
 
-1. **Android Studio** (актуальная версия) — https://developer.android.com/studio
+1. **Android Studio** (актуальная версия, умеющая AGP 9) — https://developer.android.com/studio
 2. **Python 3.11** на компьютере сборки. Версия должна совпадать с
-   `version = "3.11"` в `app/build.gradle.kts`. Проверить:
+   `version = "3.11"` в `app/build.gradle.kts`. В проекте уже прописано
+   `buildPython("py", "-3.11")`, поэтому достаточно, чтобы работало:
    ```powershell
    py -3.11 --version
    ```
-   Если такой версии нет — установите Python 3.11, либо поменяйте версию
-   в `build.gradle.kts` на ту, что у вас есть (например `3.12`).
-3. Ключ `PROXYAPI_KEY` (тот же, что в `.env` на десктопе).
+3. Компоненты SDK: **platform android-37** и **build-tools 36.0.0**
+   (Android Studio обычно уже скачала их при установке; проверить можно
+   в **Tools → SDK Manager**).
+4. Ключ `PROXYAPI_KEY` (тот же, что в `.env` на десктопе).
+
+Файл `android/local.properties` с путём к SDK уже создан; если SDK лежит
+в другом месте — поправьте `sdk.dir` в нём (в git этот файл не попадает).
 
 ---
 
@@ -65,12 +93,13 @@ Kotlin (MainActivity) ──► Chaquopy запускает Python-сервер 
 
 ### Если Gradle не находит Python
 
-Chaquopy ищет на машине сборки Python той самой версии. Если `py -3.11` не
-работает, укажите путь явно в `app/build.gradle.kts`:
+Chaquopy собирает Python-часть тем же Python 3.11, что попадёт в APK. В проекте
+уже указано `buildPython("py", "-3.11")` (через лаунчер `py`). Если это не
+сработает — укажите полный путь в `app/build.gradle.kts`:
 ```kotlin
 chaquopy {
     defaultConfig {
-        buildPython("C:/Путь/к/Python311/python.exe")
+        buildPython("C:/Пользователи/Вы/AppData/Local/Programs/Python/Python311/python.exe")
     }
 }
 ```

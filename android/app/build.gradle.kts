@@ -1,17 +1,22 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // Kotlin компилирует сам AGP (built-in Kotlin) — отдельный плагин не нужен.
     id("com.chaquo.python")
 }
 
 android {
     namespace = "com.textrpg.app"
-    compileSdk = 35
+
+    // AGP 9: compileSdk задаётся блоком (умеет и минорные версии).
+    // release(37) — это обычный Android 17 / API 37.0.
+    compileSdk {
+        version = release(37)
+    }
 
     defaultConfig {
         applicationId = "com.textrpg.app"
         minSdk = 24
-        targetSdk = 35
+        // targetSdk в AGP 9 по умолчанию равен compileSdk — не задаём явно.
         versionCode = 1
         versionName = "1.0"
 
@@ -37,9 +42,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // jvmTarget для Kotlin наследуется от targetCompatibility (17),
+    // поэтому устаревший блок kotlinOptions здесь не нужен.
 }
 
 // Python-пакеты, вкомпилированные в APK.
@@ -48,9 +52,11 @@ android {
 chaquopy {
     defaultConfig {
         version = "3.11"
-        // Chaquopy требует на машине сборки Python той же версии (3.11).
-        // Обычно хватает `py -3.11`; при необходимости укажите путь явно:
-        // buildPython("C:/Users/Вы/AppData/Local/Programs/Python/Python311/python.exe")
+        // Chaquopy собирает Python-часть тем же Python 3.11, что попадёт в APK.
+        // На этой машине 3.11 доступен через лаунчер `py`. При необходимости
+        // замените на полный путь:
+        //   buildPython("C:/Users/Вы/AppData/Local/Programs/Python/Python311/python.exe")
+        buildPython("py", "-3.11")
         pip {
             install("pydantic==1.10.18")
             install("fastapi==0.115.6")
@@ -82,4 +88,13 @@ val stagePython by tasks.registering(Sync::class) {
 
 tasks.named("preBuild") {
     dependsOn(stagePython)
+}
+
+// Gradle 9 строго следит за связями между задачами. Задачи Chaquopy читают
+// каталог src/main/python, который наполняет stagePython, поэтому связываем их
+// явно (иначе сборка падает с ошибкой «implicit dependency»).
+tasks.configureEach {
+    if (name.contains("Python") && name != "stagePython") {
+        dependsOn(stagePython)
+    }
 }
