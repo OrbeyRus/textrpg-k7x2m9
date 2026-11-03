@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="/static/css/base.css?v=4">
     <link rel="stylesheet" href="/static/css/layout.css?v=3">
-    <link rel="stylesheet" href="/static/css/components.css?v=4">
+    <link rel="stylesheet" href="/static/css/components.css?v=5">
 </head>
 <body>
 
@@ -147,9 +147,11 @@
 
             <div id="combat-abilities" class="combat-abilities" style="display:none;"></div>
 
+            <div id="combat-items" class="combat-items" style="display:none;"></div>
+
             <div id="combat-actions" class="combat-actions">
                 <button class="btn-action" onclick="doCombatAction('Атаковать оружием')">⚔️ Атака</button>
-                <button class="btn-action" onclick="doCombatAction('Использовать предмет')">🎒 Предметы</button>
+                <button class="btn-action" onclick="toggleCombatItems()">🎒 Предметы</button>
                 <button class="btn-action btn-flee" onclick="tryFlee()">🏃 Побег</button>
             </div>
 
@@ -168,6 +170,6 @@
         </div>
     </div>
 
-    <script src="/static/js/app.js?v=8"></script>
+    <script src="/static/js/app.js?v=9"></script>
 </body>
 </html>

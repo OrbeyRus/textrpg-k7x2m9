@@ -642,6 +642,7 @@ function openCombatScreen(enemy) {
     screen.classList.add('is-open');
     updateCombatUI(enemy);
     renderCombatAbilities();
+    renderCombatItems();
 }
 
 function updateCombatUI(enemy) {
@@ -727,6 +728,43 @@ function renderCombatAbilities() {
     });
 }
 
+// Панель предметов в бою: название + описание, клик — использовать.
+function renderCombatItems() {
+    const box = document.getElementById('combat-items');
+    if (!box) return;
+
+    const descriptions = (currentPlayer && currentPlayer.item_descriptions) || {};
+    const items = (currentPlayer && currentPlayer.inventory) || [];
+    box.innerHTML = '';
+
+    if (!items.length) {
+        box.innerHTML = '<div class="combat-items-empty">В сумке пусто — использовать нечего.</div>';
+        return;
+    }
+
+    items.forEach(item => {
+        const btn = document.createElement('button');
+        btn.className = 'combat-item';
+        const desc = descriptions[item];
+        btn.innerHTML = `<b>${item}</b>` + (desc ? `<span>${desc}</span>` : '');
+        btn.onclick = () => useCombatItem(item);
+        box.appendChild(btn);
+    });
+}
+
+function toggleCombatItems() {
+    const box = document.getElementById('combat-items');
+    if (!box) return;
+    renderCombatItems();
+    box.style.display = (box.style.display === 'flex') ? 'none' : 'flex';
+}
+
+function useCombatItem(itemName) {
+    const box = document.getElementById('combat-items');
+    if (box) box.style.display = 'none';
+    doCombatAction(`Использую предмет: ${itemName}`);
+}
+
 async function doCombatAction(actionText) {
     const logDiv = document.getElementById('combat-log');
     logDiv.innerHTML = "<span style='color: #e0b050;'>Ожидание удара...</span>";
@@ -769,6 +807,8 @@ async function doCombatAction(actionText) {
 function closeCombat() {
     document.getElementById('combat-screen').classList.remove('is-open');
     document.getElementById('combat-screen').style.display = 'none';
+    const itemsBox = document.getElementById('combat-items');
+    if (itemsBox) itemsBox.style.display = 'none';
     loadPlayer();
 }
 

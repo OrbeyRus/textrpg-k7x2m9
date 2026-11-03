@@ -1,10 +1,12 @@
 """Автосохранение полного лога игры по каждому персонажу.
 
 Для каждого игрока создаётся подпапка ``data/logs/{имя}_{id}/``, в которой
-ведутся два файла:
+ведутся три файла:
 
 * ``game.jsonl`` — машиночитаемые записи, по одной JSON-строке на событие;
-* ``game.log``   — тот же ход человекочитаемым текстом.
+* ``game.log``   — тот же ход человекочитаемым текстом;
+* ``story.md``   — связная «пьеса» сессии: только действия игрока и ответы
+  Мастера, без служебных тегов, — удобно читать историю целиком.
 
 Лог нужен, чтобы разбирать сюжетные несоответствия и ошибки движка: в него
 попадает сырой ответ LLM, разобранный текст, эффекты и состояние игрока.
@@ -81,8 +83,46 @@ def _write(player, entry: dict) -> None:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
         with (directory / "game.log").open("a", encoding="utf-8") as handle:
             handle.write(_render(entry))
+        _append_story(directory, player, entry)
     except Exception:  # noqa: BLE001 — логи не должны ломать игру
         pass
+
+
+# Ходы, которые попадают в связный текст пьесы, и события-разделители.
+_STORY_KINDS = {"story", "combat_action", "combat_ability", "ability_use"}
+_STORY_MARKERS = {
+    "reset": "Сброс кампании",
+    "new_game": "Новая игра",
+    "book": "Новая книга",
+}
+
+
+def _append_story(directory: Path, player, entry: dict) -> None:
+    """Дописывает ход в файл-«пьесу» ``story.md`` — связный сюжет сессии."""
+    kind = entry.get("kind")
+    lines = []
+
+    if kind in _STORY_KINDS:
+        if entry.get("action"):
+            lines.append(f"**Игрок:** {entry['action'].strip()}")
+        if entry.get("text"):
+            lines.append(f"**Мастер:** {entry['text'].strip()}")
+    elif kind in _STORY_MARKERS:
+        lines.append(f"> **{_STORY_MARKERS[kind]}**")
+        if entry.get("message"):
+            lines.append(f"> {entry['message']}")
+
+    if not lines:
+        return
+
+    path = directory / "story.md"
+    if not path.exists():
+        title = getattr(player, "name", "") or "Безымянный герой"
+        header = f"# {title} (id {getattr(player, 'id', 0)}) — история приключения\n\n"
+        path.write_text(header, encoding="utf-8")
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n\n".join(lines) + "\n\n---\n\n")
 
 
 def _render(entry: dict) -> str:

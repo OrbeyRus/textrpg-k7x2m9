@@ -68,6 +68,33 @@ def test_log_note_writes_message(monkeypatch, tmp_path):
     assert (directory / "game.log").read_text("utf-8").count("Кампания сброшена") == 1
 
 
+def test_story_play_file_collects_session(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    player = DummyPlayer()
+
+    gamelog.log_turn(player, "story", action="Осматриваюсь", raw="сырое", text="Ты видишь лес.")
+    gamelog.log_turn(player, "combat_action", action="Атакую врага", raw="сырое", text="Ты бьёшь гоблина.")
+
+    story = (tmp_path / "Андрей_7" / "story.md").read_text(encoding="utf-8")
+    assert story.startswith("# Андрей")
+    assert "**Игрок:** Осматриваюсь" in story
+    assert "**Мастер:** Ты видишь лес." in story
+    assert "**Игрок:** Атакую врага" in story
+    assert "**Мастер:** Ты бьёшь гоблина." in story
+
+
+def test_story_marker_on_reset(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    player = DummyPlayer()
+
+    gamelog.log_turn(player, "story", action="Иду", text="Ты идёшь.")
+    gamelog.log_note(player, "reset", "Кампания сброшена")
+
+    story = (tmp_path / "Андрей_7" / "story.md").read_text(encoding="utf-8")
+    assert "Сброс кампании" in story
+    assert "Кампания сброшена" in story
+
+
 def test_legacy_folder_is_renamed_to_current_name(monkeypatch, tmp_path):
     _use_tmp(monkeypatch, tmp_path)
 
