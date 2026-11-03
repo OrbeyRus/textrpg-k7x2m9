@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -19,8 +21,8 @@ class StatUpgrade(BaseModel):
 
 
 class AbilityLearn(BaseModel):
-    ability_id: str | None = None
-    ability_name: str | None = None
+    ability_id: Optional[str] = None
+    ability_name: Optional[str] = None
 
 
 class UseAbility(BaseModel):

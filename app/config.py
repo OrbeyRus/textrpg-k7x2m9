@@ -9,7 +9,13 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-DATA_DIR = BASE_DIR / "data"
+# Где хранить изменяемые данные (база, книги, логи).
+# На десктопе это просто <проект>/data. На Android код лежит в неизменяемой
+# области приложения, поэтому записывать туда нельзя — каталог данных задаётся
+# переменной TEXTRPG_DATA_DIR (её выставляет обёртка приложения).
+_data_dir_env = os.getenv("TEXTRPG_DATA_DIR", "").strip()
+DATA_DIR = Path(_data_dir_env).expanduser().resolve() if _data_dir_env else BASE_DIR / "data"
+
 BOOKS_DIR = DATA_DIR / "books"
 SOURCE_DIR = DATA_DIR / "source"
 STATIC_DIR = BASE_DIR / "static"
@@ -23,16 +29,20 @@ LOGS_DIR = DATA_DIR / "logs"
 
 
 def _load_env_file() -> None:
-    """Читает .env без внешних зависимостей, не перетирая уже заданные переменные."""
-    env_file = BASE_DIR / ".env"
-    if not env_file.exists():
-        return
-    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    """Читает .env без внешних зависимостей, не перетирая уже заданные переменные.
+
+    Смотрим два места: рядом с кодом (десктоп) и в каталоге данных (удобно для
+    Android, где код только для чтения).
+    """
+    for env_file in (BASE_DIR / ".env", DATA_DIR / ".env"):
+        if not env_file.exists():
             continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 _load_env_file()

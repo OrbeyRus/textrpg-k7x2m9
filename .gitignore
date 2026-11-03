@@ -24,6 +24,19 @@ data/logs/
 # Неиспользуемые файлы (перенесены вручную)
 Item/
 
+# Android-проект (сборка)
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/captures/
+android/local.properties
+android/app/src/main/python/
+*.apk
+*.aab
+*.keystore
+*.jks
+
 # Временные файлы
 *.log
 
