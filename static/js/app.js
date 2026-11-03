@@ -5,6 +5,19 @@ let genresCache = [];
 let selectedGenre = null;
 let selectedSecondary = null;
 
+// --- ПОЛЬЗОВАТЕЛЬ ---
+// Токен объединяет сессии одного игрока (нужен для сохранений).
+function ensureUserToken() {
+    let token = localStorage.getItem('rpg_user_token');
+    if (!token) {
+        token = (window.crypto && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `u_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem('rpg_user_token', token);
+    }
+    return token;
+}
+
 // --- ЖАНРЫ ---
 async function loadGenres() {
     try {
@@ -106,20 +119,56 @@ async function createPlayer() {
     if (!name) return alert("Введите имя!");
 
     try {
-        const response = await fetch('/player/', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name})
-        });
-        const newPlayer = await response.json();
-        
-        localStorage.setItem('rpg_player_id', newPlayer.id);
-        playerId = newPlayer.id;
-        
+        if (playerId) {
+            // Свежий герой уже создан (например, после «Сменить книгу») — задаём имя.
+            const response = await fetch(`/player/${playerId}/name`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name})
+            });
+            if (!response.ok) throw new Error("Не удалось сохранить имя");
+        } else {
+            const response = await fetch('/player/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name, user_token: ensureUserToken()})
+            });
+            const newPlayer = await response.json();
+            localStorage.setItem('rpg_player_id', newPlayer.id);
+            playerId = newPlayer.id;
+        }
+
         document.getElementById('step-name').style.display = 'none';
         document.getElementById('step-book').style.display = 'block';
     } catch (e) {
         alert("Ошибка при создании персонажа.");
+    }
+}
+
+async function startNewGame() {
+    if (!playerId) return;
+
+    const confirmed = confirm(
+        "Начнётся новая игра с новым героем.\nТекущая сессия будет сохранена.\n\nПродолжить?"
+    );
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`/player/${playerId}/new_game`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_token: ensureUserToken()})
+        });
+        if (!response.ok) throw new Error("Не удалось начать новую игру");
+
+        const data = await response.json();
+        if (data.player_id) {
+            localStorage.setItem('rpg_player_id', data.player_id);
+            playerId = data.player_id;
+        }
+        location.reload();
+    } catch (e) {
+        alert(`Ошибка: ${e.message}`);
     }
 }
 
@@ -173,7 +222,15 @@ async function loadPlayer() {
             return;
         }
         currentPlayer = await response.json();
-        
+
+        if (!currentPlayer.name) {
+            // Новый герой без имени — начинаем с первого шага.
+            document.getElementById('onboarding-screen').style.display = 'flex';
+            document.getElementById('step-name').style.display = 'block';
+            document.getElementById('step-book').style.display = 'none';
+            return;
+        }
+
         if (!currentPlayer.book_file) {
             document.getElementById('onboarding-screen').style.display = 'flex';
             document.getElementById('step-name').style.display = 'none';
@@ -471,56 +528,6 @@ function openQuests() {
 
 function closeQuests() {
     document.getElementById('quest-modal').style.display = 'none';
-}
-
-// Смена книги
-async function changeBook() {
-    const fileInput = document.getElementById('new-book-file');
-    const file = fileInput.files[0];
-    if (!file) return;
-
-    if (!confirm("Вы уверены? Текущий сюжет и прогресс будут сброшены, и начнется игра по новой книге.")) {
-        fileInput.value = '';
-        return;
-    }
-
-    const onboarding = document.getElementById('onboarding-screen');
-    const stepBook = document.getElementById('step-book');
-    const gameScreen = document.getElementById('game-screen');
-    
-    gameScreen.style.display = 'none';
-    onboarding.style.display = 'flex';
-    document.getElementById('step-name').style.display = 'none';
-    stepBook.style.display = 'block';
-    
-    document.getElementById('book-pick-btn').style.display = 'none';
-    const progressDiv = document.getElementById('book-progress');
-    progressDiv.style.display = 'block';
-    progressDiv.innerText = "Обработка новой книги... Это займет пару минут. Не закрывайте вкладку.";
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('genre', (currentPlayer && currentPlayer.genre) || 'universal');
-    if (currentPlayer && currentPlayer.genre_secondary) {
-        formData.append('genre_secondary', currentPlayer.genre_secondary);
-    }
-
-    try {
-        const response = await fetch(`/upload_book/${playerId}`, {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (!response.ok) {
-            throw new Error("Ошибка при загрузке книги");
-        }
-
-        location.reload();
-        
-    } catch (e) {
-        alert(`Ошибка: ${e.message}`);
-        location.reload();
-    }
 }
 
 // --- ЛОГИКА JRPG БОЯ ---

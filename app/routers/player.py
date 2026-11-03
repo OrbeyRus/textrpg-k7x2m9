@@ -3,20 +3,33 @@ from sqlalchemy.orm import Session
 
 from app import database
 from app.dependencies import get_db
-from app.schemas import AbilityLearn, EquipItem, PlayerCreate, StatUpgrade
-from app.services import progression
+from app.schemas import (
+    AbilityLearn,
+    EquipItem,
+    NameUpdate,
+    NewGameRequest,
+    PlayerCreate,
+    StatUpgrade,
+)
+from app.services import progression, saves
 
 router = APIRouter(prefix="/player", tags=["player"])
 
-@router.post("/")
-def create_player(player: PlayerCreate, db: Session = Depends(get_db)):
-    db_player = database.Player(
-        name=player.name,
+
+def _fresh_player(user_token: str, name: str = "") -> database.Player:
+    return database.Player(
+        name=name,
+        user_token=user_token or "",
         level=progression.START_LEVEL,
         next_level_xp=progression.xp_to_next(progression.START_LEVEL),
         stat_points=progression.START_STAT_POINTS,
         ability_points=progression.START_ABILITY_POINTS,
     )
+
+
+@router.post("/")
+def create_player(player: PlayerCreate, db: Session = Depends(get_db)):
+    db_player = _fresh_player(player.user_token, name=player.name)
     db.add(db_player)
     db.commit()
     db.refresh(db_player)
@@ -27,6 +40,45 @@ def get_player(player_id: int, db: Session = Depends(get_db)):
     db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
     if not db_player: raise HTTPException(status_code=404, detail="Нет персонажа")
     return db_player
+
+@router.post("/{player_id}/name")
+def set_player_name(player_id: int, payload: NameUpdate, db: Session = Depends(get_db)):
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player: raise HTTPException(status_code=404, detail="Нет персонажа")
+
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Имя не может быть пустым")
+
+    db_player.name = name
+    db.commit()
+    return {"status": "success", "name": name}
+
+@router.post("/{player_id}/new_game")
+def start_new_game(player_id: int, payload: NewGameRequest = None, db: Session = Depends(get_db)):
+    """Сохраняет текущую сессию и начинает новую игру с чистого героя."""
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player: raise HTTPException(status_code=404, detail="Нет персонажа")
+
+    token = (payload.user_token if payload else "") or db_player.user_token or ""
+    if token and not db_player.user_token:
+        db_player.user_token = token
+
+    # Снимок текущей сессии: сохраняем, но саму строку игрока не трогаем —
+    # это и есть «сохранённая сессия» пользователя.
+    saved = saves.create_save(db, db_player, user_token=token)
+
+    fresh = _fresh_player(token, name="")
+    db.add(fresh)
+    db.commit()
+    db.refresh(fresh)
+
+    return {
+        "status": "success",
+        "player_id": fresh.id,
+        "saved_player_id": db_player.id,
+        "save_id": saved.id,
+    }
 
 @router.post("/{player_id}/upgrade")
 def upgrade_stat(player_id: int, upgrade: StatUpgrade, db: Session = Depends(get_db)):

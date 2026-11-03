@@ -21,6 +21,7 @@ NEW_COLUMNS = {
     "xp_ledger": "TEXT DEFAULT '{}'",
     "ability_cooldowns": "TEXT DEFAULT '{}'",
     "turn": "INTEGER DEFAULT 0",
+    "user_token": "TEXT DEFAULT ''",
 }
 
 

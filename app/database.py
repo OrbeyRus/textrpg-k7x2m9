@@ -41,6 +41,8 @@ class Player(Base):
     enemy = Column(JSON, default=dict)
     book_file = Column(String, default="")
 
+    user_token = Column(String, index=True, default="")
+
     # Жанровая кампания
     genre = Column(String, default="")
     genre_secondary = Column(String, default="")
@@ -51,6 +53,20 @@ class Player(Base):
     xp_ledger = Column(JSON, default=dict)
     ability_cooldowns = Column(JSON, default=dict)
     turn = Column(Integer, default=0)
+
+
+class GameSave(Base):
+    __tablename__ = "game_saves"
+    id = Column(Integer, primary_key=True, index=True)
+    user_token = Column(String, index=True, default="")
+    source_player_id = Column(Integer, default=0)
+    name = Column(String, default="")
+    level = Column(Integer, default=1)
+    book_file = Column(String, default="")
+    genre = Column(String, default="")
+    genre_secondary = Column(String, default="")
+    created_at = Column(String, default="")
+    snapshot = Column(JSON, default=dict)
 
 
 Base.metadata.create_all(bind=engine)
