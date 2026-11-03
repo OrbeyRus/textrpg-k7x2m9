@@ -37,6 +37,9 @@ android/app/src/main/python/
 *.keystore
 *.jks
 
+# Android SDK / инструменты (локальные, в git не нужны)
+platform-tools/
+
 # Временные файлы
 *.log
 
