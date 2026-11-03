@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import database
-from app.config import DEBUG_LOG
+from app.config import DEBUG, DEBUG_LOG
 from app.content import genres
 from app.dependencies import get_db
 from app.services import abilities, campaign, llm, progression, rag
@@ -30,15 +30,18 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
     abilities.tick(db_player)
 
     book_data = rag.get_player_book(player_id, db)
-    
-    history = list(db_player.history) if db_player.history else []
-    if choice: history.append(f"Игрок: {choice}")
+
+    prior_history = list(db_player.history) if db_player.history else []
+    # Вступление уже показано, если в истории есть хотя бы один ответ Мастера.
+    has_opening = any(str(line).startswith("Мастер:") for line in prior_history)
+
+    history = prior_history
+    if choice:
+        history.append(f"Игрок: {choice}")
     recent_history = "\n".join(history[-6:]) if history else "Начало пути."
-    
-    is_start = False
-    if not choice or "Начать приключение" in str(choice) or len(history) <= 1:
-        is_start = True
-        
+
+    is_start = not has_opening
+
     if is_start:
         if len(book_data) >= 2:
             lore_context = book_data[0]['text'] + "\n" + book_data[1]['text']
@@ -47,14 +50,25 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
         else:
             lore_context = "Информация о мире недоступна."
     else:
-        search_query = f"Локация: {db_player.location}. Персонажи: {db_player.name}. Действие: {choice}. Атмосфера: начало книги."
-        lore_context = rag.get_relevant_context(book_data, search_query, top_k=1)
+        last_scene = next(
+            (
+                str(line)[len("Мастер:"):].strip()
+                for line in reversed(prior_history)
+                if str(line).startswith("Мастер:")
+            ),
+            "",
+        )
+        search_query = (
+            f"Локация: {db_player.location}. Действие игрока: {choice}. "
+            f"Текущая сцена: {last_scene[-400:]}"
+        )
+        lore_context = rag.get_relevant_context(book_data, search_query, top_k=3)
 
-        # --- ОТЛАДКА RAG ---
-        print("\n" + "="*50)
-        print(f"ИГРОК СПРОСИЛ: {choice}")
-        print(f"НАЙДЕНО В КНИГЕ: {lore_context[:300]}...") # Показываем первые 300 символов
-        print("="*50 + "\n")
+        if DEBUG:
+            print("\n" + "=" * 50)
+            print(f"ИГРОК СПРОСИЛ: {choice}")
+            print(f"НАЙДЕНО В КНИГЕ: {lore_context[:300]}...")
+            print("=" * 50 + "\n")
 
     if is_start:
         start_instruction = f"""ЭТО САМОЕ НАЧАЛО ИГРЫ. Твоя задача — литературно пересказать отрывок из книги, чтобы начать сюжет.
@@ -87,6 +101,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 ЖАНР КАМПАНИИ: {profile['display_name']}
 ТОН ПОВЕСТВОВАНИЯ: {profile['tone']}
 ЧТО СЧИТАЕТСЯ ПРОГРЕССОМ: {profile['progress_hint']}
+БОИ В ЭТОМ ЖАНРЕ: {profile['combat_hint']}
 
 СОСТОЯНИЕ ИГРОКА:
 Имя: {db_player.name}, HP: {db_player.hp}/{db_player.max_hp}, Локация: {db_player.location}
@@ -126,6 +141,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
    [ABILITY_UNLOCK] name="Название", description="что делает", effect=damage|heal|guard|rage|insight|charm|stealth, tier=1|2|3
    Выдавай такую способность редко и только по значимому сюжетному событию.
 19. ЗАПРЕТ: Никогда не описывай в открытом тексте механику игры (очки, ранги, перезарядки).
+20. ФОРМАТ ОТВЕТА: каждый ход заканчивай блоком [EFFECTS] (если изменений нет — напиши [EFFECTS] NONE). Если случилось значимое событие — добавь ровно ОДИН тег [EVENT] подходящего типа.
 
 ПРИМЕРЫ ПРАВИЛЬНОГО ОТВЕТА:
 Игрок: "Бросаю гранату"

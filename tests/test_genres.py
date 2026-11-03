@@ -51,3 +51,11 @@ def test_new_campaign_resets_player_and_applies_kit():
 def test_unknown_genre_falls_back_to_universal():
     assert genres.normalize("nonsense") == "universal"
     assert genres.get("nonsense")["code"] == "universal"
+
+
+def test_combat_hint_reflects_intensity():
+    fantasy = genres.profile_for("fantasy")   # high
+    romance = genres.profile_for("romance")   # low
+    assert fantasy["combat_hint"]
+    assert romance["combat_hint"]
+    assert fantasy["combat_hint"] != romance["combat_hint"]

@@ -37,6 +37,17 @@ _load_env_file()
 PROXYAPI_KEY = os.getenv("PROXYAPI_KEY", "")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek/deepseek-v3.2")
 
+# Модель эмбеддингов для поиска по книге (через локальный Ollama).
+# nomic-embed-text слабо различает русский текст — при желании замените на
+# мультиязычную модель (например, bge-m3) и переиндексируйте книги:
+#   ollama pull bge-m3
+#   set EMBED_MODEL=bge-m3   (или в .env)
+#   python scripts/reindex_books.py
+EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
+
+# Отладочные логи (RAG, разбор тегов и т.п.) в консоль сервера.
+DEBUG = os.getenv("DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+
 # Каталоги нужны ещё до подключения к базе.
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 BOOKS_DIR.mkdir(parents=True, exist_ok=True)

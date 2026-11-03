@@ -33,6 +33,13 @@ BASE_EVENT_WEIGHTS = {
     "milestone": 1.0,
 }
 
+# Подсказка для Мастера Игры: как часто и насколько опасны бои в жанре.
+COMBAT_HINTS = {
+    "high": "бои — основа пути: враги сильны и агрессивны, урон ощутим, отступать почти некуда",
+    "medium": "стычки случаются, но не каждый шаг: угроза реальна и требует расчёта",
+    "low": "бои редки и нежелательны: конфликты решаются словами, уговорами и хитростью",
+}
+
 GENRES = {
     "fantasy": {
         "code": "fantasy",
@@ -298,6 +305,9 @@ def profile_for(primary: str, secondary: str | None = None) -> dict:
         "tone": primary_profile["tone"],
         "progress_hint": primary_profile["progress_hint"],
         "combat_intensity": primary_profile["combat_intensity"],
+        "combat_hint": COMBAT_HINTS.get(
+            primary_profile["combat_intensity"], COMBAT_HINTS["medium"]
+        ),
         "ability_pack": primary_profile["ability_pack"],
         "stat_labels": labels,
         "event_weights": blended_weights(primary_code, secondary_code),

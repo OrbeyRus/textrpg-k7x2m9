@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -6,7 +7,7 @@ import ollama
 from fastapi import HTTPException, UploadFile
 
 from app import database
-from app.config import BOOKS_DIR
+from app.config import BOOKS_DIR, DEBUG, EMBED_MODEL
 
 def split_text(text, chunk_size=1000, overlap=200):
     chunks = []
@@ -26,20 +27,90 @@ def get_player_book(player_id: int, db):
     with open(book_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def get_relevant_context(book_data, query, top_k=1):
-    if not book_data: return "Информация о мире недоступна."
+# Слова, которые не несут смысла для поиска по книге.
+_WORDS_RE = re.compile(r"[а-яёa-z0-9]{3,}")
+_STOPWORDS = {
+    "это", "как", "что", "его", "ее", "её", "для", "или", "они", "был", "была",
+    "было", "быть", "есть", "уже", "если", "так", "все", "всё", "при", "над",
+    "под", "про", "без", "через", "когда", "где", "кто", "чем", "эти", "этот",
+    "эта", "того", "себя", "меня", "тебя", "нам", "вам", "них", "него", "нее",
+    "неё", "мой", "моя", "мне", "еще", "ещё", "только", "очень", "себе", "там",
+    "тут", "здесь", "потом", "потому", "чтобы", "которые", "который", "которая",
+    "свой", "свои", "один", "одна", "одно", "эту", "этим", "ею", "ими",
+}
+
+# Грубые русские окончания для сведения словоформ к общей основе.
+# Нужны, чтобы «Яна», «Яне», «Янке» считались одним словом при лексическом поиске.
+_ENDINGS = tuple(sorted({
+    "иями", "ями", "ами", "ией", "иях", "ях", "ов", "ев", "ий", "ый", "ой",
+    "ем", "ом", "ам", "ям", "ах", "ию", "ью", "ия", "ья", "ые", "ая", "ое",
+    "ому", "ему", "ешь", "ете", "ишь", "ите", "ют", "ут", "ат", "ят", "ла",
+    "ло", "ли", "ть", "ся", "сь", "а", "я", "у", "ю", "о", "е", "ы", "и", "й", "ь",
+}, key=len, reverse=True))
+
+
+def _stem(word: str) -> str:
+    for ending in _ENDINGS:
+        if len(word) - len(ending) >= 4 and word.endswith(ending):
+            return word[: -len(ending)]
+    return word
+
+
+def _tokens(text: str) -> set:
+    return {
+        _stem(w)
+        for w in _WORDS_RE.findall((text or "").lower())
+        if w not in _STOPWORDS
+    }
+
+
+def get_relevant_context(book_data, query, top_k=1, max_chars=2500):
+    """Гибридный поиск по книге: смысловое сходство + совпадение слов.
+
+    Возвращает несколько наиболее подходящих кусков (top_k), без дублей,
+    с ограничением по длине.
+    """
+    if not book_data:
+        return "Информация о мире недоступна."
     try:
-        query_emb = ollama.embeddings(model='nomic-embed-text', prompt=query)['embedding']
-        query_emb = np.array(query_emb)
-        scores = []
+        query_emb = np.array(
+            ollama.embeddings(model=EMBED_MODEL, prompt=query)['embedding']
+        )
+        q_norm = float(np.linalg.norm(query_emb)) or 1.0
+        q_tokens = _tokens(query)
+
+        scored = []
         for item in book_data:
-            chunk_emb = np.array(item['embedding'])
-            score = np.dot(query_emb, chunk_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(chunk_emb))
-            scores.append((score, item['text']))
-        scores.sort(key=lambda x: x[0], reverse=True)
-        return "\n\n".join([text for score, text in scores[:top_k]])
+            emb = np.array(item['embedding'])
+            denom = q_norm * (float(np.linalg.norm(emb)) or 1.0)
+            similarity = float(np.dot(query_emb, emb) / denom) if denom else 0.0
+
+            chunk_tokens = _tokens(item.get('text', ''))
+            lexical = (
+                len(q_tokens & chunk_tokens) / (len(q_tokens) + 1) if q_tokens else 0.0
+            )
+            scored.append((0.72 * similarity + 0.28 * lexical, item.get('text', '')))
+
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+
+        chosen, seen = [], set()
+        for _, text in scored:
+            if not text:
+                continue
+            key = text[:80]
+            if key in seen:
+                continue
+            seen.add(key)
+            chosen.append(text)
+            if len(chosen) >= max(1, int(top_k)):
+                break
+
+        if not chosen:
+            return "Информация о мире недоступна."
+        return "\n\n".join(chosen)[:max_chars]
     except Exception as e:
-        print(f"ОШИБКА ПОИСКА: {e}")
+        if DEBUG:
+            print(f"ОШИБКА ПОИСКА: {e}")
         return "Ошибка поиска."
 
 async def process_book_upload(file: UploadFile, player_id: int, db):
@@ -60,9 +131,10 @@ async def process_book_upload(file: UploadFile, player_id: int, db):
         new_book_data = []
         for i, chunk in enumerate(chunks):
             if not chunk.strip(): continue
-            print(f"Обработка куска {i+1} из {len(chunks)}...")
+            if DEBUG:
+                print(f"Обработка куска {i+1} из {len(chunks)}...")
             try:
-                emb = ollama.embeddings(model='nomic-embed-text', prompt=chunk)['embedding']
+                emb = ollama.embeddings(model=EMBED_MODEL, prompt=chunk)['embedding']
                 new_book_data.append({"text": chunk, "embedding": emb})
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Ошибка Ollama: {e}")
@@ -74,5 +146,6 @@ async def process_book_upload(file: UploadFile, player_id: int, db):
         db.commit()
         return {"status": "success", "chunks": len(new_book_data)}
     except Exception as e:
-        print(f"КРИТИЧЕСКАЯ ОШИБКА: {e}")
+        if DEBUG:
+            print(f"КРИТИЧЕСКАЯ ОШИБКА: {e}")
         raise HTTPException(status_code=500, detail=str(e))

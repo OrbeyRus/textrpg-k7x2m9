@@ -80,6 +80,35 @@ def test_start_does_not_award_xp():
     assert not any("XP" in e for e in effects)
 
 
+def test_missing_event_infers_discovery_on_location_change():
+    player = DummyPlayer()
+    _, effects = llm.parse_effects("Ты идёшь дальше.\n[EFFECTS] LOCATION: Тёмный лес", player)
+
+    assert player.xp > 0
+    assert any("Открытие" in e for e in effects)
+
+
+def test_missing_event_infers_combat_win_when_enemy_dies():
+    player = DummyPlayer()
+    _, effects = llm.parse_effects("Враг рассыпался.\n[EFFECTS] ENEMY_DEAD", player)
+
+    assert player.enemy == {}
+    assert any("Победа" in e for e in effects)
+
+
+def test_missing_event_without_change_gives_no_xp():
+    player = DummyPlayer()
+    _, effects = llm.parse_effects("Ты просто стоишь.\n[EFFECTS] NONE", player)
+
+    assert player.xp == 0
+
+
+def test_rag_empty_book_returns_fallback():
+    from app.services import rag
+
+    assert rag.get_relevant_context([], "что угодно") == "Информация о мире недоступна."
+
+
 def test_repeated_event_loses_value():
     player = DummyPlayer()
     event = [{"type": "social", "result": "success", "tier": "standard", "target": "Марта"}]

@@ -23,8 +23,58 @@ def _extract_events(full_text: str) -> tuple:
     return [e for e in events if e.get("type")], cleaned
 
 
+def _infer_events(prev_location, prev_enemy, prev_hp, prev_inventory, db_player) -> list:
+    """Строит событие по изменениям состояния, если LLM не прислала [EVENT].
+
+    Так опыт начисляется стабильно, даже когда модель забыла разметить ход.
+    """
+    events = []
+
+    # Враг был и исчез — значит, победа.
+    if prev_enemy and not (db_player.enemy or {}):
+        events.append({
+            "type": "combat_win",
+            "result": "success",
+            "tier": "standard",
+            "target": prev_enemy.get("name") or "враг",
+        })
+
+    # Сменилась локация — открытие нового места.
+    if db_player.location and db_player.location != prev_location:
+        events.append({
+            "type": "discovery",
+            "result": "success",
+            "tier": "standard",
+            "target": db_player.location,
+        })
+
+    # Заметная потеря здоровья — риск.
+    max_hp = int(getattr(db_player, "max_hp", 0) or 0)
+    damage = int(prev_hp) - int(db_player.hp)
+    if damage >= max(5, max_hp // 10):
+        events.append({"type": "risk", "result": "partial", "tier": "minor", "target": ""})
+
+    # Новый предмет — небольшая находка (только если ничего важнее не случилось).
+    new_items = [i for i in (db_player.inventory or []) if i not in prev_inventory]
+    if new_items and not events:
+        events.append({
+            "type": "discovery",
+            "result": "success",
+            "tier": "minor",
+            "target": new_items[0],
+        })
+
+    return events
+
+
 def parse_effects(full_text, db_player, allow_xp=True):
     effects_list = []
+
+    # Снимок состояния до разбора — по нему выведем событие, если LLM забыл тег.
+    prev_location = db_player.location
+    prev_enemy = dict(db_player.enemy or {})
+    prev_hp = db_player.hp
+    prev_inventory = list(db_player.inventory or [])
 
     # События и сюжетные способности вынимаем до остальной обработки.
     events, full_text = _extract_events(full_text)
@@ -189,6 +239,12 @@ def parse_effects(full_text, db_player, allow_xp=True):
         )
         if granted:
             effects_list.append(f"🌟 Новая способность: {granted['name']}")
+
+    # 4.5. LLM забыла тег события — выводим событие из изменений состояния.
+    if not events and allow_xp:
+        events = _infer_events(
+            prev_location, prev_enemy, prev_hp, prev_inventory, db_player
+        )
 
     # 5. Опыт за события (после всех изменений состояния)
     if events and allow_xp:

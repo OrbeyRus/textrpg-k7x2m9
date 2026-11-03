@@ -27,6 +27,7 @@ def combat_action(player_id: int, action: str = Query(...), db: Session = Depend
     
     prompt = f"""Ты — боевой движок текстовой JRPG. 
 Жанр и тон: {profile['display_name']}. {profile['tone']}.
+Бои в этом жанре: {profile['combat_hint']}.
 Игрок {db_player.name} (HP: {db_player.hp}, Оружие: {weapon}) сражается с {enemy_name} (HP: {enemy_hp_before}).
 Игрок использует действие: {action}.
 
