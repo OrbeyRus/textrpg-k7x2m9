@@ -34,7 +34,11 @@ def combat_action(player_id: int, action: str = Query(...), db: Session = Depend
 В САМОМ КОНЦЕ ответа ты ОБЯЗАН добавить теги эффектов!
 Формат строго такой (каждый тег с новой строки!):
 [EFFECTS] ENEMY_HP: -15, HP: -10
-Если враг мертв, добавь с новой строки: ENEMY_DEAD, XP: +30, ITEM: Выпавший предмет
+Если враг мертв, добавь с новой строки: ENEMY_DEAD, ITEM: Выпавший предмет
+И ОБЯЗАТЕЛЬНО один тег события с новой строки:
+[EVENT] type=combat_win, result=success, tier=standard, target="имя врага" — если враг побеждён
+[EVENT] type=obstacle, result=success|partial|fail, tier=minor|standard|major, target="имя врага" — если бой продолжается
+Числа опыта не пиши: опыт начисляет сервер.
 
 ВНИМАНИЕ: НЕ МЕНЯЙ ЛОКАЦИЮ во время боя (не пиши LOCATION). Бой происходит там, где игрок уже находится.
 """

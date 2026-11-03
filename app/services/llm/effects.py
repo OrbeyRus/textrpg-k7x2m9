@@ -1,12 +1,37 @@
 import json
 import re
 
-from app.services import progression
+from app.services import progression, xp
+
+EVENT_RE = re.compile(r'\[EVENT\]\s*([^\n]*)', re.IGNORECASE)
+
+
+def _parse_event_line(line: str) -> dict:
+    event = {}
+    for part in re.split(r',\s*', line):
+        if '=' not in part:
+            continue
+        key, value = part.split('=', 1)
+        event[key.strip().lower()] = value.strip().strip('"').strip("'")
+    return event
+
+
+def _extract_events(full_text: str) -> tuple:
+    """Вынимает теги [EVENT] из текста. Возвращает (события, очищенный текст)."""
+    events = [_parse_event_line(line) for line in EVENT_RE.findall(full_text)]
+    cleaned = EVENT_RE.sub('', full_text)
+    return [e for e in events if e.get("type")], cleaned
 
 
 def parse_effects(full_text, db_player):
     effects_list = []
-    
+
+    # События и состояние врага нужно зафиксировать до его смерти.
+    events, full_text = _extract_events(full_text)
+    enemy_max_hp = 0
+    if db_player.enemy:
+        enemy_max_hp = int(db_player.enemy.get("max_hp") or db_player.enemy.get("hp") or 0)
+
     # 1. Появление врага
     enemy_match = re.search(r'\[ENEMY\]\s*(\{.*?\})', full_text, re.DOTALL | re.IGNORECASE)
     if enemy_match:
@@ -17,6 +42,7 @@ def parse_effects(full_text, db_player):
                 "hp": enemy_json.get("hp", 10),
                 "max_hp": enemy_json.get("hp", 10)
             }
+            enemy_max_hp = int(db_player.enemy["max_hp"])
             effects_list.append(f"⚔️ Появился враг: {db_player.enemy['name']} ({db_player.enemy['hp']} HP)")
         except: 
             pass
@@ -58,20 +84,6 @@ def parse_effects(full_text, db_player):
                 val = int(hp_match.group(1))
                 db_player.hp = max(0, min(db_player.max_hp, db_player.hp + val))
                 effects_list.append(f"❤️ HP: {'+' if val > 0 else ''}{val}")
-            
-            # Опыт
-            xp_match = re.search(r'(?<![A-Za-z_])XP:\s*([+-]?\d+)', effects_str)
-            if xp_match:
-                xp_gained = int(xp_match.group(1))
-                if xp_gained != 0:
-                    db_player.xp = max(0, db_player.xp + xp_gained)
-                    effects_list.append(f"✨ Опыт: {'+' if xp_gained > 0 else ''}{xp_gained}")
-                    for new_level in progression.apply_level_up(db_player):
-                        effects_list.append(
-                            f"🆙 Уровень {new_level}! "
-                            f"+{progression.stat_points_for_level(new_level)} очк. характеристик, "
-                            f"+{progression.ability_points_for_level(new_level)} очк. способностей"
-                        )
 
             # Предметы
             item_match = re.search(r'ITEM:\s*([^\n,]+)', effects_str)
@@ -107,6 +119,21 @@ def parse_effects(full_text, db_player):
                 loc_name = loc_match.group(1).strip()
                 db_player.location = loc_name
                 effects_list.append(f"📍 Локация: {loc_name}")
+
+            # Старый тег опыта: совместимость, но с потолком.
+            if not events:
+                xp_match = re.search(r'(?<![A-Za-z_])XP:\s*([+-]?\d+)', effects_str)
+                if xp_match:
+                    xp_gained = xp.clamp_legacy_xp(int(xp_match.group(1)))
+                    if xp_gained > 0:
+                        db_player.xp = max(0, db_player.xp + xp_gained)
+                        effects_list.append(f"✨ Опыт: +{xp_gained}")
+                        for new_level in progression.apply_level_up(db_player):
+                            effects_list.append(
+                                f"🆙 Уровень {new_level}! "
+                                f"+{progression.stat_points_for_level(new_level)} очк. характеристик, "
+                                f"+{progression.ability_points_for_level(new_level)} очк. способностей"
+                            )
     
     # 3. Квесты
     quests_list = list(db_player.quests) if db_player.quests else []
@@ -131,6 +158,11 @@ def parse_effects(full_text, db_player):
         full_text = full_text.replace(done_quest_match.group(0), '').strip()
 
     db_player.quests = quests_list
+
+    # 4. Опыт за события (после всех изменений состояния)
+    if events:
+        _, xp_lines = xp.award_events(db_player, events, {"enemy_max_hp": enemy_max_hp})
+        effects_list.extend(xp_lines)
 
 # --- ЧИСТИЛЬЩИК ТЕГОВ ---
     # Удаляем ошибочно оставленные теги из текста (например, [LOCATION] Улица)
