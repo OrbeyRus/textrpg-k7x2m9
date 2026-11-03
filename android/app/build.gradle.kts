@@ -52,7 +52,6 @@ chaquopy {
         // Обычно хватает `py -3.11`; при необходимости укажите путь явно:
         // buildPython("C:/Users/Вы/AppData/Local/Programs/Python/Python311/python.exe")
         pip {
-            install("numpy")
             install("pydantic==1.10.18")
             install("fastapi==0.115.6")
             install("starlette==0.41.3")

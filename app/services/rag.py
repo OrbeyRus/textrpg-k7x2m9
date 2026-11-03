@@ -4,8 +4,15 @@ import re
 from collections import Counter
 from pathlib import Path
 
-import numpy as np
 from fastapi import HTTPException, UploadFile
+
+# numpy нужен только для быстрого косинуса, когда доступны эмбеддинги (десктоп).
+# На Android numpy не нужен: эмбеддингов там нет, а без него обходимся обычной
+# математикой — так сборка APK не тянет ни одного нативного пакета.
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - зависит от окружения
+    np = None
 
 from app import database
 from app.config import BOOKS_DIR, DEBUG
@@ -115,6 +122,25 @@ def _bm25_scores(query_tokens: set, book_data: list, k1: float = 1.2, b: float =
     return scores
 
 
+def _as_vector(values):
+    """Список чисел → вектор (numpy, если он есть, иначе обычный список)."""
+    if np is not None:
+        return np.asarray(values, dtype=float)
+    return [float(v) for v in values]
+
+
+def _norm(vector) -> float:
+    if np is not None:
+        return float(np.linalg.norm(vector))
+    return math.sqrt(sum(v * v for v in vector))
+
+
+def _dot(a, b) -> float:
+    if np is not None:
+        return float(np.dot(a, b))
+    return float(sum(x * y for x, y in zip(a, b)))
+
+
 def get_relevant_context(book_data, query, top_k=1, max_chars=2500):
     """Гибридный поиск по книге: смысловое сходство + совпадение слов.
 
@@ -133,8 +159,8 @@ def get_relevant_context(book_data, query, top_k=1, max_chars=2500):
         try:
             vector = embeddings.embed(query)
             if vector is not None:
-                query_emb = np.asarray(vector, dtype=float)
-                q_norm = float(np.linalg.norm(query_emb)) or 1.0
+                query_emb = _as_vector(vector)
+                q_norm = _norm(query_emb) or 1.0
         except Exception as e:
             if DEBUG:
                 print(f"ЭМБЕДДИНГ НЕДОСТУПЕН, ИЩУ ПО СЛОВАМ: {e}")
@@ -154,9 +180,9 @@ def get_relevant_context(book_data, query, top_k=1, max_chars=2500):
         # Смысловое сходство учитываем только когда есть и вектор запроса,
         # и вектор куска. Иначе остаётся честный лексический поиск.
         if query_emb is not None and item.get("embedding"):
-            emb = np.asarray(item["embedding"], dtype=float)
-            denom = q_norm * (float(np.linalg.norm(emb)) or 1.0)
-            similarity = float(np.dot(query_emb, emb) / denom) if denom else 0.0
+            emb = _as_vector(item["embedding"])
+            denom = q_norm * (_norm(emb) or 1.0)
+            similarity = (_dot(query_emb, emb) / denom) if denom else 0.0
             score = 0.72 * similarity + 0.28 * lexical
 
         scored.append((score, text))
