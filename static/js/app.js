@@ -584,7 +584,7 @@ document.getElementById('custom-input').addEventListener('keypress', function (e
 
 async function resetGame() {
     if (confirm("Начать заново? Весь прогресс будет потерян.")) {
-        await fetch(`/reset/${playerId}`);
+        await fetch(`/reset/${playerId}`, {method: 'POST'});
         location.reload();
     }
 }

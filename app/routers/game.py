@@ -10,7 +10,7 @@ from app.services import abilities, campaign, llm, progression, rag
 router = APIRouter(tags=["game"])
 
 
-@router.get("/reset/{player_id}")
+@router.post("/reset/{player_id}")
 def reset_player(player_id: int, db: Session = Depends(get_db)):
     db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
     if db_player:
@@ -132,6 +132,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 10. ВРАГИ: Если начинается бой, создавай врага тегом: [ENEMY] {{"name": "Имя", "hp": 30}}.
 11. Если игрок атакует, нанеси урон врагу: [EFFECTS] ENEMY_HP: -10. Учитывай оружие игрока.
 12. Если враг атакует игрока, нанеси урон игроку: [EFFECTS] HP: -5.
+    ВАЖНО: в бою сервер сам пересчитывает числа по характеристикам и экипировке — тебе достаточно описать сцену. Просто укажи, что удар попал (ENEMY_HP отрицательный) или что враг попал по игроку (HP отрицательный), не подбирая точные цифры.
 13. ВАЖНО: Если в "ПОСЛЕДНИХ СОБЫТИЯХ" было описано сражение, учти это. Опиши последствия. НЕ возвращай игрока в старые локации.
 14. КАТЕГОРИЧЕСКИЙ ЗАПРЕТ: Никогда не пиши теги вроде [LOCATION] или [ENEMY] открытым текстом внутри описания. Все команды должны быть либо в блоке [EFFECTS], либо в формате [ENEMY] {{...}}.
 15. ФОРМАТИРОВАНИЕ: Каждый тег (LOCATION, ENEMY, EFFECTS) пиши СТРОГО С НОВОЙ СТРОКИ. Никогда не сливай их в одну строку.

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app import database
 from app.content import genres
 from app.dependencies import get_db
-from app.services import abilities, llm, progression
+from app.services import abilities, combat, llm
 
 router = APIRouter(prefix="/combat", tags=["combat"])
 
@@ -18,6 +18,7 @@ def combat_action(player_id: int, action: str = Query(...), db: Session = Depend
 
     enemy_name = db_player.enemy.get("name", "Враг")
     enemy_hp_before = db_player.enemy.get("hp", 0)
+    hp_before = db_player.hp
     
     weapon = db_player.equipment.get("weapon", "кулаки") if db_player.equipment else "кулаки"
     profile = genres.profile_for(
@@ -50,12 +51,11 @@ def combat_action(player_id: int, action: str = Query(...), db: Session = Depend
         full_text = llm.call_llm(prompt, max_tokens=300)
         full_text, effects_list = llm.parse_effects(full_text, db_player)
         
-        # --- ЗАЩИТА ОТ ДУРАКА (Авто-урон) ---
+        # --- ЗАЩИТА ОТ ДУРАКА: числа боя считает сервер ---
         current_enemy_hp = db_player.enemy.get("hp", 0) if db_player.enemy else 0
         
         if db_player.enemy and current_enemy_hp == enemy_hp_before:
-            has_weapon = any(w in weapon.lower() for w in ["нож", "меч", "топор", "кинжал", "пистолет"])
-            damage = progression.attack_power(db_player.strength) + (7 if has_weapon else 0)
+            damage = combat.attack_power(db_player)
             new_enemy = dict(db_player.enemy)
             new_enemy["hp"] = max(0, enemy_hp_before - damage)
             db_player.enemy = new_enemy
@@ -64,6 +64,12 @@ def combat_action(player_id: int, action: str = Query(...), db: Session = Depend
             if new_enemy["hp"] <= 0:
                 effects_list.append(f"💀 Враг {enemy_name} повержен!")
                 db_player.enemy = {}
+
+        # Если LLM не описала ответный удар врага — наносим его сами.
+        if db_player.enemy and db_player.hp == hp_before:
+            hit = combat.incoming_damage(db_player, db_player.enemy.get("max_hp"))
+            db_player.hp = max(0, db_player.hp - hit)
+            effects_list.append(f"❤️ HP: -{hit}")
         
         # ВАЖНО: Сохраняем события боя в общую историю игрока!
         history = list(db_player.history) if db_player.history else []

@@ -47,3 +47,14 @@ def test_upload_rejects_unknown_genre_before_processing():
     files = {"file": ("book.txt", b"hello", "text/plain")}
     response = client.post("/upload_book/1", files=files, data={"genre": "nonsense"})
     assert response.status_code in (400, 404)
+
+
+def test_reset_requires_post():
+    # GET больше не поддерживается: сброс меняет состояние, значит POST.
+    assert client.get("/reset/999999").status_code == 405
+
+
+def test_reset_unknown_player_is_noop():
+    response = client.post("/reset/999999")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"

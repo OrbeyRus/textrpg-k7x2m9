@@ -1,4 +1,4 @@
-from app.services import abilities, llm, progression
+from app.services import abilities, combat, llm, progression
 
 
 class DummyPlayer:
@@ -118,17 +118,26 @@ def test_guard_reduces_incoming_damage():
     player = DummyPlayer("fantasy")
     player.statuses = {"guard": {"value": 8, "turns": 2}}
 
+    hp_before = player.hp
+    incoming = combat.incoming_damage(player, player.enemy["max_hp"])
     _, effects = llm.parse_effects("Удар.\n[EFFECTS] HP: -20", player)
-    assert player.hp == 38
+
+    # Число «-20» от LLM заменяется серверным уроном, щит гасит 8 из него.
+    assert player.hp == hp_before - (incoming - 8)
     assert any("Щит поглотил 8" in e for e in effects)
 
 
 def test_rage_increases_outgoing_damage():
-    player = DummyPlayer("fantasy")
-    player.statuses = {"rage": {"value": 7, "turns": 2}}
+    calm = DummyPlayer("fantasy")
+    llm.parse_effects("Выпад.\n[EFFECTS] ENEMY_HP: -10", calm)
 
-    llm.parse_effects("Выпад.\n[EFFECTS] ENEMY_HP: -10", player)
-    assert player.enemy["hp"] == 13
+    raging = DummyPlayer("fantasy")
+    raging.statuses = {"rage": {"value": 7, "turns": 2}}
+    llm.parse_effects("Выпад.\n[EFFECTS] ENEMY_HP: -10", raging)
+
+    calm_damage = calm.enemy["max_hp"] - calm.enemy["hp"]
+    rage_damage = raging.enemy["max_hp"] - raging.enemy["hp"]
+    assert rage_damage > calm_damage
 
 
 def test_ability_unlock_tag_grants_ability():

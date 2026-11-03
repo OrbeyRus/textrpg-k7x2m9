@@ -1,7 +1,7 @@
 import json
 import re
 
-from app.services import abilities, progression, xp
+from app.services import abilities, combat, progression, xp
 
 EVENT_RE = re.compile(r'\[EVENT\]\s*([^\n]*)', re.IGNORECASE)
 
@@ -88,13 +88,15 @@ def parse_effects(full_text, db_player, allow_xp=True):
     if enemy_match:
         try:
             enemy_json = json.loads(enemy_match.group(1))
+            base_hp = int(enemy_json.get("hp", 10) or 10)
+            hp = combat.scale_enemy_hp(db_player, base_hp)
             db_player.enemy = {
                 "name": enemy_json.get("name", "Неизвестный"),
-                "hp": enemy_json.get("hp", 10),
-                "max_hp": enemy_json.get("hp", 10)
+                "hp": hp,
+                "max_hp": hp,
             }
-            enemy_max_hp = int(db_player.enemy["max_hp"])
-            effects_list.append(f"⚔️ Появился враг: {db_player.enemy['name']} ({db_player.enemy['hp']} HP)")
+            enemy_max_hp = hp
+            effects_list.append(f"⚔️ Появился враг: {db_player.enemy['name']} ({hp} HP)")
         except: 
             pass
         full_text = full_text.replace(enemy_match.group(0), '').strip()
@@ -118,6 +120,8 @@ def parse_effects(full_text, db_player, allow_xp=True):
                         bonus = int(rage["value"])
                         val -= bonus
                         effects_list.append(f"🔥 Прилив сил: +{bonus} к урону")
+                    # Урон по врагу зажимаем в диапазон атаки игрока.
+                    val = -combat.player_damage(db_player, val)
 
                 # КОСТЫЛЬ ДЛЯ SQLALCHEMY: Пересоздаем словарь, чтобы база увидела изменения
                 new_enemy = dict(db_player.enemy)
@@ -141,6 +145,10 @@ def parse_effects(full_text, db_player, allow_xp=True):
             hp_match = re.search(r'(?<![A-Za-z_])HP:\s*([+-]?\d+)', effects_str)
             if hp_match: 
                 val = int(hp_match.group(1))
+
+                # Урон врага считает сервер: сила врага, жанр и защита игрока.
+                if val < 0 and db_player.enemy:
+                    val = -combat.incoming_damage(db_player, enemy_max_hp)
 
                 # Щит гасит часть входящего урона.
                 if val < 0:

@@ -1,4 +1,4 @@
-from app.services import llm, progression, xp
+from app.services import combat, llm, progression, xp
 
 
 class DummyPlayer:
@@ -27,10 +27,14 @@ class DummyPlayer:
 
 def test_enemy_damage_does_not_hurt_player():
     player = DummyPlayer()
+    enemy_max_hp = player.enemy["max_hp"]
     _, effects = llm.parse_effects("Удар.\n[EFFECTS] ENEMY_HP: -10, HP: -5", player)
 
-    assert player.enemy["hp"] == 20
-    assert player.hp == 95
+    # Урон врагу зажат сервером в диапазон атаки игрока.
+    low, high = combat.attack_range(player)
+    assert low <= enemy_max_hp - player.enemy["hp"] <= high
+    # ENEMY_HP не задевает игрока: он получает серверный ответный удар, а не «5».
+    assert player.hp == player.max_hp - combat.incoming_damage(player, enemy_max_hp)
     assert any("Урон врагу" in e for e in effects)
 
 
