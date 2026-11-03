@@ -60,6 +60,36 @@ def test_reset_unknown_player_is_noop():
     assert response.json()["status"] == "ok"
 
 
+def test_log_disposition_is_ascii_safe():
+    from app.routers import player as player_router
+
+    header = player_router._log_disposition(7, "Андрей")
+    header.encode("latin-1")  # HTTP-заголовки допускают только latin-1
+    assert 'filename="log_player_7.txt"' in header
+    assert "filename*=UTF-8''" in header
+
+
+def test_log_export_works_with_cyrillic_name():
+    from app import database
+
+    created = client.post(
+        "/player/", json={"user_token": "test-log-cyr", "name": "Иван Тестовый"}
+    )
+    assert created.status_code == 200
+    player_id = created.json()["id"]
+    try:
+        response = client.get(f"/player/{player_id}/log")
+        assert response.status_code == 200
+        disposition = response.headers.get("Content-Disposition", "")
+        disposition.encode("latin-1")  # заголовок не должен ломать кодировку
+        assert "filename*=UTF-8''" in disposition
+    finally:
+        session = database.SessionLocal()
+        session.query(database.Player).filter(database.Player.id == player_id).delete()
+        session.commit()
+        session.close()
+
+
 def test_settings_endpoint_lists_providers_without_keys():
     response = client.get("/settings")
     assert response.status_code == 200

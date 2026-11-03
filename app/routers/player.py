@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
+from urllib.parse import quote
 
 from app import database
 from app.dependencies import get_db
@@ -194,6 +195,19 @@ def drop_item(player_id: int, item: AbilityLearn, db: Session = Depends(get_db))
     raise HTTPException(status_code=400, detail="Предмет не найден")
 
 
+def _log_disposition(player_id: int, name: str) -> str:
+    """Заголовок Content-Disposition для файла журнала.
+
+    Имя персонажа может быть на кириллице, а HTTP-заголовки допускают только
+    latin-1. Поэтому имя файла по умолчанию делаем ASCII («log_player_N.txt»),
+    а красивое человекочитаемое передаём по RFC 5987 (``filename*``) в
+    процентном кодировании. Иначе ответ падал бы с 500.
+    """
+    fallback = f"log_player_{player_id}.txt"
+    pretty = quote(f"log_{name}_{player_id}.txt")
+    return f'attachment; filename="{fallback}"; filename*=UTF-8\'\'{pretty}'
+
+
 @router.get("/{player_id}/log")
 def export_log(player_id: int, db: Session = Depends(get_db)):
     """Выгружает журнал игры одним текстовым файлом.
@@ -220,5 +234,5 @@ def export_log(player_id: int, db: Session = Depends(get_db)):
         chunks.append("Журнал пуст: сыграйте хотя бы один ход и повторите.")
 
     name = gamelog.safe_name(getattr(db_player, "name", "")) or "player"
-    headers = {"Content-Disposition": f'attachment; filename="log_{name}_{player_id}.txt"'}
+    headers = {"Content-Disposition": _log_disposition(player_id, name)}
     return PlainTextResponse("\n\n".join(chunks), headers=headers)
