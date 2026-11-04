@@ -53,6 +53,33 @@ def test_unknown_genre_falls_back_to_universal():
     assert genres.get("nonsense")["code"] == "universal"
 
 
+def test_all_genres_describe_every_stat():
+    from app.services.progression import STAT_KEYS
+
+    for code in genres.GENRE_ORDER:
+        labels = genres.labels_for(code)
+        descriptions = genres.descriptions_for(code)
+        for key in STAT_KEYS:
+            assert labels.get(key), (code, key)
+            assert descriptions.get(key), (code, key)
+            # Пояснение должно называть характеристику так же, как её видит игрок.
+            assert labels[key] in descriptions[key], (code, key)
+
+
+def test_historical_intelligence_explains_abilities():
+    profile = genres.profile_for("historical")
+    text = profile["stat_descriptions"]["intelligence"]
+
+    assert "Образованность" in text
+    assert "способност" in text
+
+
+def test_public_list_includes_stat_descriptions():
+    for item in genres.public_list():
+        assert item["stat_descriptions"]["strength"]
+        assert item["stat_descriptions"]["vitality"]
+
+
 def test_combat_hint_reflects_intensity():
     fantasy = genres.profile_for("fantasy")   # high
     romance = genres.profile_for("romance")   # low

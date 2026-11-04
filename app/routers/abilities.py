@@ -1,12 +1,22 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import database
+from app.content import genres
 from app.dependencies import get_db
 from app.schemas import AbilityLearn, UseAbility
 from app.services import abilities, gamelog, llm
 
 router = APIRouter(prefix="/abilities", tags=["abilities"])
+
+# Механику внебоевой способности сервер уже применил сам. Числовые HP/XP в
+# ответе ИИ вырезаем, иначе лечение или урон могли бы посчитаться дважды.
+# ENEMY_HP/ENEMY_DEAD не трогаем: появление врага — законное изменение мира.
+_NUMERIC_EFFECT_RE = re.compile(
+    r'(?<![A-Za-z_])(?:HP|XP)\s*:\s*[+-]?\d+\s*,?', re.IGNORECASE
+)
 
 
 def _get_player(player_id: int, db: Session) -> database.Player:
@@ -56,21 +66,62 @@ def use_ability(player_id: int, payload: UseAbility, db: Session = Depends(get_d
     abilities.set_cooldown(db_player, ability)
     notes = abilities.apply_field_effect(db_player, ability, payload.target)
 
-    prompt = f"""Ты — талантливый писатель и Мастер Игры.
-Игрок {db_player.name} применяет способность «{ability['name']}» ({ability['description']}).
-Место: {db_player.location}. Отношения: {db_player.relationships}.
+    # Отыгрыш способности вне боя: ИИ получает её описание, жанр и контекст сцены
+    # и обыгрывает действие строго по описанию. Механику сервер уже применил
+    # (``notes``), поэтому ИИ её только описывает и не считает числа сам.
+    profile = genres.profile_for(
+        db_player.genre or genres.DEFAULT_GENRE,
+        db_player.genre_secondary or None,
+    )
+    history = list(db_player.history or [])
+    recent_history = "\n".join(history[-6:]) if history else "Начало пути."
+    outcome = "; ".join(notes) if notes else "внешних изменений нет"
+    target_line = f"\nЦель способности: {payload.target}." if payload.target else ""
 
-Опиши результат в 1-2 абзаца от второго лица, живо и по жанру.
-НЕ пиши в ответе числа и служебные теги, кроме одного тега события с новой строки, если это уместно:
-[EVENT] type=growth|social|relationship|discovery, result=success, tier=minor|standard, target="объект"
+    prompt = f"""Ты — талантливый писатель и Мастер Игры.
+Игрок {db_player.name} применяет способность «{ability['name']}» вне боя.
+ОПИСАНИЕ СПОСОБНОСТИ (обыграй строго по нему): {ability['description']}
+
+ЖАНР КАМПАНИИ: {profile['display_name']}
+ТОН ПОВЕСТВОВАНИЯ: {profile['tone']}
+ЧТО СЧИТАЕТСЯ ПРОГРЕССОМ: {profile['progress_hint']}
+
+СОСТОЯНИЕ ИГРОКА:
+HP: {db_player.hp}/{db_player.max_hp}, Локация: {db_player.location}
+Инвентарь: {db_player.inventory}
+Отношения: {db_player.relationships}{target_line}
+МЕХАНИЧЕСКИЙ РЕЗУЛЬТАТ (уже применён сервером, не пересчитывай): {outcome}
+
+ПОСЛЕДНИЕ СОБЫТИЯ:
+{recent_history}
+
+ПРАВИЛА:
+1. Опиши применение способности от ВТОРОГО лица: как герой её применяет и что происходит. Строго по описанию способности и в тоне жанра, 2-3 абзаца, без чисел.
+2. Механику способности сервер уже учёл: НЕ добавляй теги HP, XP и ENEMY_HP — просто опиши результат словами.
+3. Если по итогу сцены в мире что-то меняется, допиши новой строкой блок [EFFECTS]: ITEM: Название, REMOVE_ITEM: Название, LOCATION: Название, REPUTATION: +5, TITLE: Название, FACTION: Название. Если изменений нет — [EFFECTS] NONE.
+4. Если применение способности стало значимым событием, добавь ровно ОДИН тег события с новой строки:
+   [EVENT] type=discovery|social|relationship|growth|obstacle|risk|quest|milestone, result=success|partial|fail, tier=minor|standard|major, target="объект"
+   Обычное действие НЕ размечай.
+5. Пиши только на русском. Не описывай механику игры (очки, ранги, перезарядки).
 """
     try:
-        raw_text = llm.call_llm(prompt, max_tokens=220)
+        raw_text = llm.call_llm(prompt, max_tokens=320)
+        raw_text = _NUMERIC_EFFECT_RE.sub("", raw_text)
         full_text, effects_list = llm.parse_effects(raw_text, db_player)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc))
 
     effects_list = notes + effects_list
+
+    # Результат становится частью истории: следующий ход его помнит, а окно
+    # рассказа его показывает (loadPlayer рисует последние записи истории).
+    action_line = f"применяет способность «{ability['name']}»"
+    if payload.target:
+        action_line += f" → {payload.target}"
+    history.append(f"Игрок: {action_line}")
+    if full_text.strip():
+        history.append(f"Мастер: {full_text}")
+    db_player.history = history[-15:]
     db.commit()
 
     gamelog.log_turn(

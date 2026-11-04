@@ -171,6 +171,21 @@ def test_field_heal_at_full_health_reports_full():
     assert player.hp == player.max_hp
 
 
+def test_all_ability_descriptions_are_present_and_honest():
+    from app.content import abilities as catalog
+
+    for ability in catalog._iter():
+        assert ability["description"].strip(), ability["id"]
+        assert ability["effect"] in catalog.EFFECTS, ability["id"]
+
+        text = ability["description"].lower()
+        # Описание не должно обещать не то, что делает механика.
+        if ability["effect"] == "guard":
+            assert "щит" in text, ability["id"]
+        if ability["effect"] == "damage":
+            assert "урон" in text, ability["id"]
+
+
 def test_charm_field_effect_bumps_relationship():
     player = DummyPlayer("romance")
     abilities.learn(player, "warm_word")

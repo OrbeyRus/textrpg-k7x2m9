@@ -4,7 +4,7 @@
 стартовый набор. Механики при этом общие для всех жанров.
 """
 
-from app.services.progression import STAT_LABELS
+from app.services.progression import STAT_DESCRIPTIONS, STAT_LABELS
 
 DEFAULT_GENRE = "universal"
 
@@ -63,9 +63,18 @@ GENRES = {
         "stat_labels": {
             "strength": "Мощь",
             "agility": "Сноровка",
+            "vitality": "Живучесть",
             "intelligence": "Магия",
             "perception": "Чутьё",
             "luck": "Фортуна",
+        },
+        "stat_descriptions": {
+            "strength": "Мощь: +2 к силе удара оружием за очко — враги падают быстрее.",
+            "agility": "Сноровка: уклонение от атак (до 60%) и инициатива — +0,5 к атаке за очко.",
+            "vitality": "Живучесть: +10 к запасу здоровья за очко и защита от урона.",
+            "intelligence": "Магия: +2 к силе заклинаний (способностей) за очко.",
+            "perception": "Чутьё: меткость — промахи и слабые удары реже, +1% к шансу крита за очко.",
+            "luck": "Фортуна: +1,5% к шансу крита и +2% к находкам за очко.",
         },
         "starting_inventory": ["Факел"],
         "starting_equipment": {"weapon": "Кинжал"},
@@ -97,6 +106,14 @@ GENRES = {
             "perception": "Эмпатия",
             "luck": "Шарм",
         },
+        "stat_descriptions": {
+            "strength": "Напор: +2 к силе удара за очко, если дело дойдёт до драки.",
+            "agility": "Грация: уклонение от ударов (до 60%) и инициатива — +0,5 к атаке за очко.",
+            "vitality": "Выдержка: +10 к запасу здоровья за очко и защита от урона.",
+            "intelligence": "Эрудиция: +2 к силе способностей за очко.",
+            "perception": "Эмпатия: меткость — слабые удары реже (до 60%), +1% к шансу крита за очко.",
+            "luck": "Шарм: +1,5% к шансу крита и +2% к находкам за очко.",
+        },
         "starting_inventory": ["Блокнот", "Кулон"],
         "starting_equipment": {},
     },
@@ -127,6 +144,14 @@ GENRES = {
             "perception": "Внимательность",
             "luck": "Интуиция",
         },
+        "stat_descriptions": {
+            "strength": "Натиск: +2 к силе удара за очко — пригодится в стычке.",
+            "agility": "Реакция: уклонение от ударов (до 60%) и инициатива — +0,5 к атаке за очко.",
+            "vitality": "Выносливость: +10 к запасу здоровья за очко и защита от урона.",
+            "intelligence": "Дедукция: +2 к силе способностей за очко — приёмы работают мощнее.",
+            "perception": "Внимательность: меткость — слабые удары реже (до 60%), +1% к шансу крита за очко.",
+            "luck": "Интуиция: +1,5% к шансу крита и +2% к находкам за очко.",
+        },
         "starting_inventory": ["Блокнот", "Лупа"],
         "starting_equipment": {},
     },
@@ -155,6 +180,15 @@ GENRES = {
             "vitality": "Стойкость",
             "intelligence": "Смекалка",
             "perception": "Чутьё",
+            "luck": "Удача",
+        },
+        "stat_descriptions": {
+            "strength": "Натиск: +2 к силе удара за очко — когда бежать уже поздно.",
+            "agility": "Реакция: уклонение от ударов (до 60%) и инициатива — +0,5 к атаке за очко.",
+            "vitality": "Стойкость: +10 к запасу здоровья за очко и защита от урона.",
+            "intelligence": "Смекалка: +2 к силе способностей за очко.",
+            "perception": "Чутьё: меткость — слабые удары реже (до 60%), +1% к шансу крита за очко.",
+            "luck": "Удача: +1,5% к шансу крита и +2% к находкам за очко.",
         },
         "starting_inventory": ["Фонарь", "Спички"],
         "starting_equipment": {},
@@ -184,6 +218,15 @@ GENRES = {
             "vitality": "Устойчивость",
             "intelligence": "Логика",
             "perception": "Наблюдательность",
+            "luck": "Удача",
+        },
+        "stat_descriptions": {
+            "strength": "Мощь: +2 к силе атаки за очко — прямое решение конфликта.",
+            "agility": "Реакция: уклонение от ударов (до 60%) и инициатива — +0,5 к атаке за очко.",
+            "vitality": "Устойчивость: +10 к запасу здоровья за очко и защита от урона.",
+            "intelligence": "Логика: +2 к силе способностей за очко — приёмы и техника мощнее.",
+            "perception": "Наблюдательность: меткость — слабые удары реже (до 60%), +1% к шансу крита за очко.",
+            "luck": "Удача: +1,5% к шансу крита и +2% к находкам за очко.",
         },
         "starting_inventory": ["Мультитул"],
         "starting_equipment": {},
@@ -215,6 +258,14 @@ GENRES = {
             "perception": "Прозорливость",
             "luck": "Фортуна",
         },
+        "stat_descriptions": {
+            "strength": "Доблесть: +2 к силе удара за очко — исход поединка чести.",
+            "agility": "Сноровка: уклонение от ударов (до 60%) и инициатива — +0,5 к атаке за очко.",
+            "vitality": "Здоровье: +10 к запасу здоровья за очко и защита от урона.",
+            "intelligence": "Образованность: +2 к силе способностей за очко — приёмы и знания работают сильнее.",
+            "perception": "Прозорливость: меткость — слабые удары реже (до 60%), +1% к шансу крита за очко.",
+            "luck": "Фортуна: +1,5% к шансу крита и +2% к находкам за очко.",
+        },
         "starting_inventory": ["Письмо"],
         "starting_equipment": {},
     },
@@ -245,6 +296,14 @@ GENRES = {
             "perception": "Зоркость",
             "luck": "Везучесть",
         },
+        "stat_descriptions": {
+            "strength": "Мощь: +2 к силе удара за очко в любой стычке.",
+            "agility": "Проворство: уклонение от ударов (до 60%) и инициатива — +0,5 к атаке за очко.",
+            "vitality": "Закалка: +10 к запасу здоровья за очко и защита от урона.",
+            "intelligence": "Смекалка: +2 к силе способностей за очко.",
+            "perception": "Зоркость: меткость — слабые удары реже (до 60%), +1% к шансу крита за очко.",
+            "luck": "Везучесть: +1,5% к шансу крита и +2% к находкам за очко.",
+        },
         "starting_inventory": ["Верёвка", "Компас"],
         "starting_equipment": {},
     },
@@ -258,6 +317,7 @@ GENRES = {
         "ability_pack": "universal",
         "event_weights": dict(BASE_EVENT_WEIGHTS),
         "stat_labels": {},
+        "stat_descriptions": {},
         "starting_inventory": [],
         "starting_equipment": {},
     },
@@ -282,6 +342,13 @@ def labels_for(code: str | None) -> dict:
     return labels
 
 
+def descriptions_for(code: str | None) -> dict:
+    """Пояснения характеристик для жанра: что улучшится при вложении очка."""
+    descriptions = dict(STAT_DESCRIPTIONS)
+    descriptions.update(GENRES[normalize(code)].get("stat_descriptions", {}))
+    return descriptions
+
+
 def public_list() -> list:
     """Список жанров для интерфейса."""
     return [
@@ -290,6 +357,7 @@ def public_list() -> list:
             "name": GENRES[code]["name"],
             "description": GENRES[code]["description"],
             "stat_labels": labels_for(code),
+            "stat_descriptions": descriptions_for(code),
         }
         for code in GENRE_ORDER
     ]
@@ -333,6 +401,12 @@ def profile_for(primary: str, secondary: str | None = None) -> dict:
         for key, value in GENRES[secondary_code].get("stat_labels", {}).items():
             labels.setdefault(key, value)
 
+    descriptions = dict(STAT_DESCRIPTIONS)
+    descriptions.update(primary_profile.get("stat_descriptions", {}))
+    if secondary_code:
+        for key, value in GENRES[secondary_code].get("stat_descriptions", {}).items():
+            descriptions.setdefault(key, value)
+
     return {
         "code": primary_code,
         "secondary": secondary_code,
@@ -345,6 +419,7 @@ def profile_for(primary: str, secondary: str | None = None) -> dict:
         ),
         "ability_pack": primary_profile["ability_pack"],
         "stat_labels": labels,
+        "stat_descriptions": descriptions,
         "event_weights": blended_weights(primary_code, secondary_code),
         "starting_inventory": list(primary_profile.get("starting_inventory", [])),
         "starting_equipment": dict(primary_profile.get("starting_equipment", {})),

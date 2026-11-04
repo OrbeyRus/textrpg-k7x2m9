@@ -111,14 +111,28 @@ function statLabelsFor(primary, secondary) {
     return labels;
 }
 
+function statDescriptionsFor(primary, secondary) {
+    const primaryProfile = genresCache.find(g => g.code === primary);
+    let descriptions = primaryProfile && primaryProfile.stat_descriptions
+        ? { ...primaryProfile.stat_descriptions } : {};
+    const secondaryProfile = genresCache.find(g => g.code === secondary);
+    if (secondaryProfile && secondaryProfile.stat_descriptions) {
+        descriptions = { ...descriptions, ...secondaryProfile.stat_descriptions };
+    }
+    return descriptions;
+}
+
 function applyStatLabels(primary, secondary) {
     const labels = statLabelsFor(primary, secondary);
+    const descriptions = statDescriptionsFor(primary, secondary);
 
     document.querySelectorAll('.stat-row[data-stat]').forEach(row => {
         const labelEl = row.querySelector('.stat-name');
         if (!labelEl) return;
         const base = labelEl.dataset.base || labelEl.innerText;
         labelEl.innerText = labels[row.dataset.stat] || base;
+        // Наведение (на ПК) показывает, что даёт вложение очка в характеристику.
+        row.title = descriptions[row.dataset.stat] || '';
     });
 }
 
@@ -705,11 +719,8 @@ async function useAbility(abilityId) {
             return;
         }
 
-        const storyDiv = document.getElementById('story');
-        const label = ab ? ab.name : 'Способность';
-        if (data.story) {
-            storyDiv.innerHTML = `<div class="past-action">> 📖 ${label}</div><div>${data.story.replace(/\n/g, '<br>')}</div>`;
-        }
+        // Результат уже записан в историю на сервере, поэтому окно рассказа
+        // обновится само (loadPlayer рисует последние записи истории).
         await loadPlayer();
         showEffects(data.effects || []);
     } catch (e) { console.error(e); }
@@ -963,13 +974,18 @@ function closeCharModal() {
 function charStatRows() {
     const p = currentPlayer;
     const labels = statLabelsFor(p.genre, p.genre_secondary);
+    const descriptions = statDescriptionsFor(p.genre, p.genre_secondary);
     const canUpgrade = (p.stat_points || 0) > 0;
     return CHAR_STATS.map(([key, base]) => {
         const name = labels[key] || base;
+        const hint = descriptions[key] || '';
         return `<div class="char-stat">
-            <span class="char-stat-name">${name}</span>
-            <span class="char-stat-value">${p[key]}</span>
-            <button class="btn-plus" ${canUpgrade ? '' : 'disabled'} onclick="upgrade('${key}')">+</button>
+            <div class="char-stat-top">
+                <span class="char-stat-name">${name}</span>
+                <span class="char-stat-value">${p[key]}</span>
+                <button class="btn-plus" ${canUpgrade ? '' : 'disabled'} onclick="upgrade('${key}')">+</button>
+            </div>
+            ${hint ? `<div class="char-stat-hint">${hint}</div>` : ''}
         </div>`;
     }).join('');
 }

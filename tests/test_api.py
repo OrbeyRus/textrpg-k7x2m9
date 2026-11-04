@@ -36,6 +36,7 @@ def test_genres_endpoint_returns_catalog():
     genres = response.json()["genres"]
     assert len(genres) >= 8
     assert all("stat_labels" in g for g in genres)
+    assert all(g["stat_descriptions"]["strength"] for g in genres)
 
 
 def test_stat_whitelist_rejects_non_stats():
@@ -107,6 +108,57 @@ def test_player_state_includes_derived_stats():
         for key in ("attack_min", "attack_max", "defense", "crit_chance", "dodge_chance"):
             assert key in derived
         assert derived["attack_min"] <= derived["attack_max"]
+    finally:
+        session = database.SessionLocal()
+        session.query(database.Player).filter(database.Player.id == player_id).delete()
+        session.commit()
+        session.close()
+
+
+def test_field_ability_is_roleplayed_and_saved_to_history(monkeypatch):
+    from app import database
+    from app.services import llm
+
+    captured = {}
+
+    def fake_llm(prompt, max_tokens=800):
+        captured["prompt"] = prompt
+        return (
+            "Ты собираешься с мыслями, и мир становится чуть яснее.\n"
+            "[EFFECTS] NONE\n"
+            '[EVENT] type=growth, result=success, tier=minor, target="размышление"'
+        )
+
+    monkeypatch.setattr(llm, "call_llm", fake_llm)
+
+    created = client.post(
+        "/player/", json={"user_token": "test-ability", "name": "Мыслитель"}
+    )
+    assert created.status_code == 200
+    player_id = created.json()["id"]
+    try:
+        learned = client.post(
+            f"/abilities/{player_id}/learn", json={"ability_id": "focus"}
+        )
+        assert learned.status_code == 200
+
+        response = client.post(
+            f"/abilities/{player_id}/use", json={"ability_id": "focus", "target": ""}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "мир становится чуть яснее" in data["story"]
+
+        # ИИ получает описание способности и правила отыгрыша вне боя.
+        prompt = captured["prompt"]
+        assert "ОПИСАНИЕ СПОСОБНОСТИ" in prompt
+        assert "Собирает внимание" in prompt
+
+        # Результат сохранён в историю — следующий ход его помнит.
+        state = client.get(f"/player/{player_id}").json()
+        joined = "\n".join(state["history"] or [])
+        assert "применяет способность" in joined
+        assert "мир становится чуть яснее" in joined
     finally:
         session = database.SessionLocal()
         session.query(database.Player).filter(database.Player.id == player_id).delete()
