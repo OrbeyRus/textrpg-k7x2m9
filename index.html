@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/static/fonts/fonts.css?v=1">
     <link rel="stylesheet" href="/static/css/base.css?v=7">
     <link rel="stylesheet" href="/static/css/layout.css?v=5">
-    <link rel="stylesheet" href="/static/css/components.css?v=14">
+    <link rel="stylesheet" href="/static/css/components.css?v=15">
 </head>
 <body>
 
@@ -35,10 +35,9 @@
 
             <div id="step-book" class="step" style="display: none;">
                 <p class="step-ok">✓ Герой создан</p>
-                <p class="step-label">Шаг 2. Выберите готовую историю</p>
-                <p class="step-hint">Классика в общественном достоянии — играть можно сразу, ничего не загружая.</p>
-                <div id="library-grid" class="library-grid"></div>
-                <div id="library-progress" class="book-progress" style="display: none;"></div>
+                <p class="step-label">Шаг 2. Выберите книгу для новой истории</p>
+                <p class="step-hint">Готовая классика — в списке доступных книг. Свою книгу можно загрузить ниже.</p>
+                <button class="btn-action btn-block" onclick="openLibraryModal()">Доступные книги</button>
 
                 <p class="step-label" style="margin-top: 22px;">…или загрузите свою книгу</p>
                 <p class="step-label">Жанр книги</p>
@@ -70,10 +69,6 @@
                 <span class="ico">📜</span> Журнал квестов
             </button>
 
-            <button class="menu-btn menu-btn-book" onclick="startNewGame()">
-                <span class="ico">📚</span> Сменить книгу
-            </button>
-
             <h2 style="margin-top: 24px;">Характеристики</h2>
             <div class="points-avail">Доступно очков: <span id="c-points">0</span></div>
             <div class="stats-list">
@@ -95,6 +90,7 @@
                 <h1>Мир приключений</h1>
                 <div class="top-bar-actions">
                     <button class="btn-menu" onclick="openMenu()">☰ Меню</button>
+                    <button class="btn-menu" onclick="startNewGame()">📚 Сменить книгу</button>
                     <button class="btn-reset" onclick="resetGame()">Сброс</button>
                 </div>
             </div>
@@ -190,6 +186,31 @@
                 <button class="icon-btn" onclick="closeQuests()" aria-label="Закрыть">&times;</button>
             </div>
             <div id="quest-list-container"></div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ДОСТУПНЫХ КНИГ -->
+    <div id="library-modal" class="overlay library-overlay" style="display: none;">
+        <div class="library-modal-card">
+            <div class="quest-head">
+                <h2>Доступные книги</h2>
+                <button class="icon-btn" onclick="closeLibraryModal()" aria-label="Закрыть">&times;</button>
+            </div>
+            <p class="step-hint">Классика в общественном достоянии. Нажмите книгу — начнётся новая история, загружать ничего не нужно.</p>
+            <div id="library-grid" class="library-grid"></div>
+            <div id="library-progress" class="book-progress" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- ПОДТВЕРЖДЕНИЕ (в стиле игры вместо системного окна браузера) -->
+    <div id="confirm-modal" class="overlay confirm-overlay" style="display: none;">
+        <div class="confirm-card" role="dialog" aria-modal="true">
+            <h2 id="confirm-title" class="confirm-title">Подтверждение</h2>
+            <p id="confirm-message" class="confirm-message"></p>
+            <div class="confirm-actions">
+                <button class="btn-action btn-ghost" id="confirm-cancel" onclick="closeConfirm(false)">Отмена</button>
+                <button class="btn-action" id="confirm-ok" onclick="closeConfirm(true)">ОК</button>
+            </div>
         </div>
     </div>
 
@@ -299,6 +320,6 @@
         <div class="item-tip-actions" id="item-tip-actions"></div>
     </div>
 
-    <script src="/static/js/app.js?v=16"></script>
+    <script src="/static/js/app.js?v=17"></script>
 </body>
 </html>

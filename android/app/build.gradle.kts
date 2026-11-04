@@ -29,8 +29,8 @@ android {
         applicationId = "com.textrpg.app"
         minSdk = 24
         // targetSdk в AGP 9 по умолчанию равен compileSdk — не задаём явно.
-        versionCode = 8
-        versionName = "1.2.1"
+        versionCode = 9
+        versionName = "1.2.2"
 
         ndk {
             // arm64-v8a — обычные современные телефоны,

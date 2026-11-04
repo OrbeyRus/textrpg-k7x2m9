@@ -717,6 +717,69 @@
     .library-grid { grid-template-columns: 1fr; max-height: none; }
 }
 
+/* окно доступных книг: список прокручивается целиком в модалке,
+   поэтому внутренней прокрутке сетки здесь места нет */
+.library-overlay { z-index: 2000; }
+.library-modal-card {
+    position: relative;
+    z-index: 1;
+    width: min(640px, 96vw);
+    max-height: 84vh;
+    overflow-y: auto;
+    margin: auto;
+    padding: 24px 26px;
+    background:
+        radial-gradient(500px 220px at 50% -20%, rgba(224, 176, 80, 0.12), transparent 70%),
+        linear-gradient(170deg, #1a202b, #0b0f15 75%);
+    border: 1px solid rgba(224, 176, 80, 0.35);
+    border-radius: 8px;
+    box-shadow: 0 40px 90px -40px #000, inset 0 0 70px rgba(0, 0, 0, 0.5);
+    animation: cardIn 0.35s cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+.library-modal-card .library-grid { max-height: none; overflow: visible; padding-right: 0; }
+
+/* ---------- диалог подтверждения (в стиле игры) ---------- */
+.confirm-overlay { z-index: 3000; align-items: center; }
+
+.confirm-card {
+    position: relative;
+    z-index: 1;
+    width: min(440px, 94vw);
+    margin: auto;
+    padding: 24px 26px 20px;
+    background:
+        radial-gradient(420px 180px at 50% -20%, rgba(224, 176, 80, 0.14), transparent 70%),
+        linear-gradient(170deg, #1a202b, #0b0f15 75%);
+    border: 1px solid rgba(224, 176, 80, 0.4);
+    border-radius: 10px;
+    box-shadow: 0 40px 90px -30px #000, inset 0 0 60px rgba(0, 0, 0, 0.5);
+    animation: cardIn 0.3s cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+
+.confirm-title {
+    margin: 0 0 10px;
+    padding: 0;
+    border: none;
+    font-size: 1.12rem;
+    color: var(--gold);
+}
+
+.confirm-message {
+    margin: 0 0 20px;
+    font-size: 0.98rem;
+    line-height: 1.5;
+    color: var(--text);
+    white-space: pre-line;
+}
+
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.confirm-actions .btn-action { flex: 0 0 auto; min-width: 100px; }
+.btn-danger {
+    border-color: rgba(255, 90, 70, 0.6);
+    background: rgba(255, 90, 70, 0.16);
+}
+.btn-danger:hover { background: rgba(255, 90, 70, 0.28); }
+
 @media (max-width: 980px) {
     .genre-grid-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -943,7 +1006,7 @@
 }
 
 /* ---------- кнопка меню и баннер обновления ---------- */
-.top-bar-actions { display: flex; align-items: center; gap: 8px; }
+.top-bar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
 
 .btn-menu {
     padding: 8px 14px;

@@ -122,7 +122,7 @@ function applyStatLabels(primary, secondary) {
 async function createPlayer() {
     const nameInput = document.getElementById('player-name-input');
     const name = nameInput.value.trim();
-    if (!name) return alert("Введите имя!");
+    if (!name) return showNotice("Введите имя!");
 
     try {
         if (playerId) {
@@ -147,15 +147,16 @@ async function createPlayer() {
         document.getElementById('step-name').style.display = 'none';
         document.getElementById('step-book').style.display = 'block';
     } catch (e) {
-        alert("Ошибка при создании персонажа.");
+        showNotice("Ошибка при создании персонажа.");
     }
 }
 
 async function startNewGame() {
     if (!playerId) return;
 
-    const confirmed = confirm(
-        "Начнётся новая игра с новым героем.\nТекущая сессия будет сохранена.\n\nПродолжить?"
+    const confirmed = await showConfirm(
+        'Начнётся новая игра с новым героем.\nТекущая сессия будет сохранена.',
+        { title: 'Сменить книгу', okLabel: 'Продолжить' }
     );
     if (!confirmed) return;
 
@@ -174,7 +175,7 @@ async function startNewGame() {
         }
         location.reload();
     } catch (e) {
-        alert(`Ошибка: ${e.message}`);
+        showNotice(`Ошибка: ${e.message}`);
     }
 }
 
@@ -220,12 +221,15 @@ function renderLibraryGrid() {
 
 async function openLibraryBook(bookId, card) {
     if (!playerId) {
-        alert('Сначала создайте героя.');
+        showNotice('Сначала создайте героя.');
         return;
     }
-    if (!confirm('Начать новую историю по этой книге?\nТекущая сессия будет сохранена.')) {
-        return;
-    }
+    const book = libraryCache.find(b => b.id === bookId);
+    const message = book
+        ? `Начать новую историю по книге «${book.title}»?\nТекущая сессия будет сохранена.`
+        : 'Начать новую историю по этой книге?\nТекущая сессия будет сохранена.';
+    const confirmed = await showConfirm(message, { title: 'Новая история', okLabel: 'Начать' });
+    if (!confirmed) return;
 
     const progressEl = document.getElementById('library-progress');
     const cards = document.querySelectorAll('#library-grid .library-card');
@@ -280,15 +284,81 @@ async function openLibraryBook(bookId, card) {
             const err = await response.json();
             if (err.detail) detail = `\n${err.detail}`;
         } catch (e) { /* ответ без JSON */ }
-        alert(`Не удалось открыть книгу (код ${response.status}).${detail}`);
+        showNotice(`Не удалось открыть книгу (код ${response.status}).${detail}`);
     } catch (e) {
         clearInterval(timer);
-        alert('Ошибка сети при открытии книги: ' + e.message);
+        showNotice('Ошибка сети при открытии книги: ' + e.message);
     }
 
     progressEl.style.display = 'none';
     cards.forEach(btn => { btn.disabled = false; });
     if (card) card.classList.remove('is-loading');
+}
+
+// Окно «Доступные книги» — отдельная модалка, чтобы список не растягивал
+// экран онбординга и его было удобно листать.
+function openLibraryModal() {
+    if (!libraryCache.length) loadLibrary();
+    const modal = document.getElementById('library-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeLibraryModal() {
+    const modal = document.getElementById('library-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+// --- ДИАЛОГ ПОДТВЕРЖДЕНИЯ (в стиле игры) ---
+// Системный confirm() в WebView подписывается «Подтвердите действие на http://…»,
+// поэтому рисуем своё окно. showConfirm возвращает Promise<boolean>.
+let confirmResolver = null;
+
+function showConfirm(message, options = {}) {
+    const modal = document.getElementById('confirm-modal');
+    if (!modal) return Promise.resolve(window.confirm(message));
+
+    // Если предыдущее окно ещё открыто — считаем его отменённым.
+    if (confirmResolver) {
+        const previous = confirmResolver;
+        confirmResolver = null;
+        previous(false);
+    }
+
+    const title = document.getElementById('confirm-title');
+    const msg = document.getElementById('confirm-message');
+    const ok = document.getElementById('confirm-ok');
+    const cancel = document.getElementById('confirm-cancel');
+    if (title) title.innerText = options.title || 'Подтверждение';
+    if (msg) msg.innerText = message;
+    if (ok) {
+        ok.innerText = options.okLabel || 'ОК';
+        ok.classList.toggle('btn-danger', !!options.danger);
+    }
+    if (cancel) {
+        cancel.innerText = options.cancelLabel || 'Отмена';
+        cancel.style.display = options.hideCancel ? 'none' : '';
+    }
+    modal.style.display = 'flex';
+
+    return new Promise(resolve => { confirmResolver = resolve; });
+}
+
+function closeConfirm(result) {
+    const modal = document.getElementById('confirm-modal');
+    if (modal) modal.style.display = 'none';
+    const resolver = confirmResolver;
+    confirmResolver = null;
+    if (resolver) resolver(result);
+}
+
+// Информационное сообщение — то же окно, но без кнопки «Отмена».
+function showNotice(message, options = {}) {
+    return showConfirm(message, {
+        ...options,
+        hideCancel: true,
+        title: options.title || 'Сообщение',
+        okLabel: options.okLabel || 'Понятно'
+    });
 }
 
 // --- ЗАГРУЗКА КНИГИ ---
@@ -313,7 +383,7 @@ async function uploadBook() {
     if (!file) return;
 
     if (!selectedGenre) {
-        alert('Сначала выберите жанр книги.');
+        showNotice('Сначала выберите жанр книги.');
         return;
     }
 
@@ -396,18 +466,18 @@ async function uploadBook() {
             const err = await response.json();
             if (err.detail) detail = `\n${err.detail}`;
         } catch (e) { /* ответ без JSON */ }
-        alert(`Не удалось обработать книгу (код ${response.status}).${detail}`);
+        showNotice(`Не удалось обработать книгу (код ${response.status}).${detail}`);
         resetUi();
     } catch (e) {
         clearInterval(timer);
         clearTimeout(stallWatch);
         if (stalled) {
-            alert(
+            showNotice(
                 'Файл не удалось отправить на сервер за 2 минуты.\n' +
                 'Попробуйте выбрать файл заново или взять книгу меньшего размера.'
             );
         } else {
-            alert(`Ошибка сети при загрузке книги: ${e.message}`);
+            showNotice(`Ошибка сети при загрузке книги: ${e.message}`);
         }
         resetUi();
     }
@@ -499,9 +569,11 @@ async function loadPlayer() {
                 const desc = descriptions[item];
                 div.dataset.tip = `${item}${desc ? ' — ' + desc : ''}\n${TOUCH_DEVICE ? 'Коснитесь для действий' : 'ЛКМ — надеть, ПКМ — выбросить'}`;
                 div.onclick = () => openBagItem(item);
-                div.oncontextmenu = (e) => {
+                div.oncontextmenu = async (e) => {
                     e.preventDefault();
-                    if(confirm(`Выбросить ${item}?`)) dropItem(item);
+                    if (await showConfirm(`Выбросить ${item}?`, { title: 'Выбросить предмет', okLabel: 'Выбросить', danger: true })) {
+                        dropItem(item);
+                    }
                 };
                 bag.appendChild(div);
             });
@@ -600,7 +672,7 @@ async function learnAbility(abilityId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.detail || 'Не удалось изучить способность');
+            showNotice(data.detail || 'Не удалось изучить способность');
             return;
         }
         await loadPlayer();
@@ -621,7 +693,7 @@ async function useAbility(abilityId) {
         });
         const data = await response.json();
         if (!response.ok) {
-            alert(data.detail || 'Не удалось применить способность');
+            showNotice(data.detail || 'Не удалось применить способность');
             return;
         }
 
@@ -794,10 +866,14 @@ document.getElementById('custom-input').addEventListener('keypress', function (e
 });
 
 async function resetGame() {
-    if (confirm("Начать заново? Весь прогресс будет потерян.")) {
-        await fetch(`/reset/${playerId}`, {method: 'POST'});
-        location.reload();
-    }
+    if (!playerId) return;
+    const confirmed = await showConfirm(
+        'Начать заново? Весь прогресс персонажа будет потерян.',
+        { title: 'Сброс', okLabel: 'Сбросить', danger: true }
+    );
+    if (!confirmed) return;
+    await fetch(`/reset/${playerId}`, {method: 'POST'});
+    location.reload();
 }
 
 // Журнал квестов
@@ -1311,9 +1387,11 @@ function openBagItem(item) {
     actions.push({
         label: 'Выбросить',
         kind: 'drop',
-        run: () => {
+        run: async () => {
             hideItemTip();
-            if (confirm(`Выбросить ${item}?`)) dropItem(item);
+            if (await showConfirm(`Выбросить ${item}?`, { title: 'Выбросить предмет', okLabel: 'Выбросить', danger: true })) {
+                dropItem(item);
+            }
         }
     });
 
@@ -1341,7 +1419,15 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hideItemTip();
+    if (e.key !== 'Escape') return;
+    if (confirmResolver) { closeConfirm(false); return; }
+    hideItemTip();
+});
+
+// Тап по затемнённому фону закрывает окна (книг и подтверждения).
+document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'library-modal') closeLibraryModal();
+    if (e.target && e.target.id === 'confirm-modal') closeConfirm(false);
 });
 
 // --- МЕНЮ И НАСТРОЙКИ ---
@@ -1726,7 +1812,7 @@ function openExternal(url) {
 // --- Лог и выход ---
 async function saveLogFile() {
     if (!playerId) {
-        alert('Сначала создайте героя.');
+        showNotice('Сначала создайте героя.');
         return;
     }
     if (ANDROID) {
@@ -1746,18 +1832,20 @@ async function saveLogFile() {
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 2000);
     } catch (error) {
-        alert('Не удалось сохранить лог: ' + error.message);
+        showNotice('Не удалось сохранить лог: ' + error.message);
     }
 }
 
-function exitApp() {
+async function exitApp() {
     if (ANDROID) {
         ANDROID.exitApp();
         return;
     }
-    if (confirm('Закрыть игру? На компьютере закройте вкладку браузера.')) {
-        window.close();
-    }
+    const confirmed = await showConfirm(
+        'Закрыть игру? На компьютере закройте вкладку браузера.',
+        { title: 'Выход', okLabel: 'Закрыть' }
+    );
+    if (confirmed) window.close();
 }
 
 async function initSettings() {
