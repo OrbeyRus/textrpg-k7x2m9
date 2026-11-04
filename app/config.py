@@ -63,7 +63,7 @@ DEBUG = os.getenv("DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
 
 # Версия игры. На ПК совпадает с Android-версией из build.gradle.kts.
 # Используется при проверке обновлений на GitHub.
-APP_VERSION = os.getenv("TEXTRPG_VERSION", "1.2.4")
+APP_VERSION = os.getenv("TEXTRPG_VERSION", "1.2.5")
 
 # Каталоги нужны ещё до подключения к базе.
 DATA_DIR.mkdir(parents=True, exist_ok=True)

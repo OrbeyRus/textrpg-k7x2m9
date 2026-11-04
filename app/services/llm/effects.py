@@ -7,7 +7,10 @@ EVENT_RE = re.compile(r'\[EVENT\]\s*([^\n]*)', re.IGNORECASE)
 
 # Ключи эффектов — по ним понимаем, где заканчивается значение предмета
 # (описание может содержать запятые, поэтому резать по первой запятой нельзя).
-_EFFECT_KEY = r'(?:ENEMY_HP|ENEMY_DEAD|REMOVE_ITEM|ITEM|LOCATION|XP|HP|NONE)'
+_EFFECT_KEY = (
+    r'(?:ENEMY_HP|ENEMY_DEAD|REMOVE_ITEM|ITEM|LOCATION|'
+    r'REPUTATION|TITLE|FACTION|XP|HP|NONE)'
+)
 _ITEM_RE = re.compile(
     r'(?<![A-Za-z_])ITEM:\s*(.*?)(?=,\s*' + _EFFECT_KEY + r'\s*:|$)',
     re.IGNORECASE | re.DOTALL,
@@ -20,9 +23,9 @@ _REMOVE_ITEM_RE = re.compile(
 # «Сырые» теги эффектов, которые LLM иногда пишет без обёртки [EFFECTS].
 # Нужны, чтобы такие теги всё равно применялись и не утекали в текст рассказа.
 _RAW_EFFECT_RE = re.compile(
-    r'(?<![A-Za-z_])(?P<num>ENEMY_HP|HP|XP)\s*:\s*(?P<val>[+-]?\d+)'
+    r'(?<![A-Za-z_])(?P<num>ENEMY_HP|HP|XP|REPUTATION)\s*:\s*(?P<val>[+-]?\d+)'
     r'|(?P<dead>ENEMY_DEAD)'
-    r'|(?P<word>REMOVE_ITEM|ITEM|LOCATION)\s*:\s*(?P<text>[^\n,]+)',
+    r'|(?P<word>REMOVE_ITEM|ITEM|LOCATION|TITLE|FACTION)\s*:\s*(?P<text>[^\n,]+)',
     re.IGNORECASE,
 )
 
@@ -248,6 +251,30 @@ def parse_effects(full_text, db_player, allow_xp=True):
                 db_player.location = loc_name
                 effects_list.append(f"📍 Локация: {loc_name}")
 
+            # Репутация, звание и фракция (по сюжету)
+            rep_match = re.search(r'(?<![A-Za-z_])REPUTATION:\s*([+-]?\d+)', effects_str)
+            if rep_match:
+                delta = int(rep_match.group(1))
+                current = int(getattr(db_player, "reputation", 0) or 0)
+                db_player.reputation = max(-999, min(999, current + delta))
+                effects_list.append(
+                    f"🏅 Репутация: {'+' if delta >= 0 else ''}{delta}"
+                )
+
+            faction_match = re.search(r'(?<![A-Za-z_])FACTION:\s*([^\[\n,]+)', effects_str)
+            if faction_match:
+                faction = faction_match.group(1).strip()
+                if faction:
+                    db_player.faction = faction
+                    effects_list.append(f"⚑ Фракция: {faction}")
+
+            title_match = re.search(r'(?<![A-Za-z_])TITLE:\s*([^\[\n,]+)', effects_str)
+            if title_match:
+                title = title_match.group(1).strip()
+                if title:
+                    db_player.title = title
+                    effects_list.append(f"🎖️ Звание: {title}")
+
             # Старый тег опыта: совместимость, но с потолком.
             if not events and allow_xp:
                 xp_match = re.search(r'(?<![A-Za-z_])XP:\s*([+-]?\d+)', effects_str)
@@ -330,9 +357,15 @@ def parse_effects(full_text, db_player, allow_xp=True):
     # (ENEMY удаляем только если после него нет фигурной скобки {, чтобы не сломать реальные теги врагов)
 
     # Подчищаем «сырые» обрывки эффектов, если они всё же уцелели в прозе.
-    full_text = re.sub(r'(?<![A-Za-z_])(?:ENEMY_HP|XP|HP)\s*:\s*[+-]?\d+', '', full_text)
+    full_text = re.sub(
+        r'(?<![A-Za-z_])(?:ENEMY_HP|REPUTATION|XP|HP)\s*:\s*[+-]?\d+', '', full_text
+    )
     full_text = re.sub(r'(?<![A-Za-z_])ENEMY_DEAD\b', '', full_text)
-    full_text = re.sub(r'(?<![A-Za-z_])(?:REMOVE_ITEM|ITEM|LOCATION)\s*:\s*[^\n,]+', '', full_text)
+    full_text = re.sub(
+        r'(?<![A-Za-z_])(?:REMOVE_ITEM|ITEM|LOCATION|TITLE|FACTION)\s*:\s*[^\n,]+',
+        '',
+        full_text,
+    )
     # Убираем осевшие разделители и задвоенную пунктуацию от вырезанных тегов.
     full_text = re.sub(r'[ \t]*,[ \t]*(?=[,.;:!?]|$)', '', full_text)
     full_text = re.sub(r'([.,!?])\1+', r'\1', full_text)

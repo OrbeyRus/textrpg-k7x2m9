@@ -13,7 +13,7 @@ from app.schemas import (
     PlayerCreate,
     StatUpgrade,
 )
-from app.services import abilities, gamelog, items, progression, saves
+from app.services import abilities, combat, gamelog, items, progression, saves
 
 router = APIRouter(prefix="/player", tags=["player"])
 
@@ -54,6 +54,8 @@ def get_player(player_id: int, db: Session = Depends(get_db)):
     data["item_descriptions"] = items.describe_all(db_player)
     # Подсказка, в какой слот логичнее надеть предмет (для кнопок в карточке).
     data["item_slots"] = items.slots_all(db_player)
+    # Производные боевые значения: считает сервер, окно персонажа их показывает.
+    data["derived"] = combat.derived_stats(db_player)
     return data
 
 @router.post("/{player_id}/name")

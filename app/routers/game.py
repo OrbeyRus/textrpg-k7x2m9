@@ -113,6 +113,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 Отношения: {db_player.relationships}
 Активные квесты: {db_player.quests}
 Текущий враг: {db_player.enemy}
+Звание: {getattr(db_player, 'title', '') or '—'}, Фракция: {getattr(db_player, 'faction', '') or '—'}, Репутация: {getattr(db_player, 'reputation', 0) or 0}
 
 ПОСЛЕДНИЕ СОБЫТИЯ:
 {recent_history}
@@ -124,6 +125,7 @@ def get_story(player_id: int, choice: str = Query(None), db: Session = Depends(g
 4. СИСТЕМА ЭФФЕКТОВ: Ты — игровой движок. Если в мире происходят изменения, ты ОБЯЗАН добавить в самом конце скрытый тег [EFFECTS].
 5. ФОРМАТ ЭФФЕКТОВ: Пиши строго так: [EFFECTS] HP: -5, ITEM: Название, REMOVE_ITEM: Название, LOCATION: Название. Опыт в [EFFECTS] НЕ пиши.
 5а. ОПИСАНИЕ ПРЕДМЕТОВ: когда игрок находит вещь, добавь короткое пояснение после названия через тире: ITEM: Название — что это и зачем (до 8 слов, без запятых). Пример: ITEM: Ржавый кинжал — бьёт быстро, но неглубоко.
+5б. ЗВАНИЕ, ФРАКЦИЯ И РЕПУТАЦИЯ: если по сюжету меняются, добавь их в [EFFECTS]: REPUTATION: +5 или REPUTATION: -5 (целое число), TITLE: Название звания (например, «Следопыт»), FACTION: Название фракции. Звание и фракцию меняй редко — только по значимому событию. Репутацию меняй по последствиям поступков.
 6. ИСПОЛЬЗОВАНИЕ ПРЕДМЕТОВ: Если игрок отдает или использует предмет — используй ТОЛЬКО REMOVE_ITEM.
 7. ОПЫТ ЗА СОБЫТИЯ: не пиши числа опыта. Вместо этого добавь с новой строки ОДИН тег события:
    [EVENT] type=ТИП, result=success|partial|fail, tier=minor|standard|major|epic, target="объект"

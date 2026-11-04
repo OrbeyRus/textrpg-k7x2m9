@@ -101,19 +101,24 @@ function refreshGenreSelection() {
     }
 }
 
-function applyStatLabels(primary, secondary) {
+function statLabelsFor(primary, secondary) {
     const primaryProfile = genresCache.find(g => g.code === primary);
-    let labels = primaryProfile && primaryProfile.stat_labels ? { ...primaryProfile.stat_labels } : null;
+    let labels = primaryProfile && primaryProfile.stat_labels ? { ...primaryProfile.stat_labels } : {};
     const secondaryProfile = genresCache.find(g => g.code === secondary);
     if (secondaryProfile && secondaryProfile.stat_labels) {
-        labels = { ...(labels || {}), ...secondaryProfile.stat_labels };
+        labels = { ...labels, ...secondaryProfile.stat_labels };
     }
+    return labels;
+}
+
+function applyStatLabels(primary, secondary) {
+    const labels = statLabelsFor(primary, secondary);
 
     document.querySelectorAll('.stat-row[data-stat]').forEach(row => {
         const labelEl = row.querySelector('.stat-name');
         if (!labelEl) return;
         const base = labelEl.dataset.base || labelEl.innerText;
-        labelEl.innerText = (labels && labels[row.dataset.stat]) || base;
+        labelEl.innerText = labels[row.dataset.stat] || base;
     });
 }
 
@@ -532,6 +537,9 @@ async function loadPlayer() {
             : '—';
         document.getElementById('c-genre').innerText = genreLabel;
         applyStatLabels(currentPlayer.genre, currentPlayer.genre_secondary);
+
+        // Если окно персонажа открыто — обновляем и его (после «+» или хода).
+        if (isCharModalOpen()) renderCharModal();
         
         document.getElementById('s-str').innerText = currentPlayer.strength;
         document.getElementById('s-agi').innerText = currentPlayer.agility;
@@ -910,6 +918,158 @@ function openQuests() {
 
 function closeQuests() {
     document.getElementById('quest-modal').style.display = 'none';
+}
+
+// --- ОКНО ПЕРСОНАЖА ---
+// Подробная карточка героя: базовые характеристики с «+», производные боевые
+// значения (их считает сервер), звание/фракция/репутация, квесты и отношения.
+const CHAR_STATS = [
+    ['strength', 'Сила'],
+    ['agility', 'Ловкость'],
+    ['vitality', 'Живучесть'],
+    ['intelligence', 'Интеллект'],
+    ['perception', 'Восприятие'],
+    ['luck', 'Удача'],
+];
+
+const REL_STAGES = ['Едва знакомы', 'Знакомство', 'Симпатия', 'Доверие', 'Близость'];
+
+function fmtStat(value) {
+    return (value === null || value === undefined || value === '') ? '—' : value;
+}
+
+function fmtPercent(value) {
+    if (value === null || value === undefined) return '—';
+    return `${value}%`;
+}
+
+function isCharModalOpen() {
+    const modal = document.getElementById('char-modal');
+    return !!modal && modal.style.display === 'flex';
+}
+
+function openCharModal() {
+    const modal = document.getElementById('char-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    renderCharModal();
+}
+
+function closeCharModal() {
+    const modal = document.getElementById('char-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function charStatRows() {
+    const p = currentPlayer;
+    const labels = statLabelsFor(p.genre, p.genre_secondary);
+    const canUpgrade = (p.stat_points || 0) > 0;
+    return CHAR_STATS.map(([key, base]) => {
+        const name = labels[key] || base;
+        return `<div class="char-stat">
+            <span class="char-stat-name">${name}</span>
+            <span class="char-stat-value">${p[key]}</span>
+            <button class="btn-plus" ${canUpgrade ? '' : 'disabled'} onclick="upgrade('${key}')">+</button>
+        </div>`;
+    }).join('');
+}
+
+function charDerivedRows() {
+    const d = (currentPlayer && currentPlayer.derived) || {};
+    const attack = (d.attack_min != null && d.attack_max != null)
+        ? `${d.attack_min}–${d.attack_max}`
+        : fmtStat(d.attack);
+    const rows = [
+        ['Атака', attack],
+        ['Защита', fmtStat(d.defense)],
+        ['Запас здоровья', fmtStat(d.max_hp)],
+        ['Сила способностей', fmtStat(d.magic_power)],
+        ['Шанс крита', fmtPercent(d.crit_chance)],
+        ['Крит. урон', d.crit_bonus != null ? `+${d.crit_bonus}%` : '—'],
+        ['Уклонение', fmtPercent(d.dodge_chance)],
+        ['Меткость', fmtPercent(d.accuracy)],
+        ['Инициатива', d.initiative != null ? `+${d.initiative} к атаке` : '—'],
+        ['Добыча', fmtPercent(d.loot_chance)],
+    ];
+    return rows.map(([name, value]) =>
+        `<div class="char-derived-row"><span>${name}</span><b>${value}</b></div>`
+    ).join('');
+}
+
+function charQuestRows() {
+    const quests = (currentPlayer && currentPlayer.quests) || [];
+    if (!quests.length) {
+        return '<div class="char-empty">Пока нет заданий.</div>';
+    }
+    return quests.map(quest => {
+        const done = quest.status === 'completed';
+        const status = done ? '✅ Выполнен' : '⏳ Активен';
+        const where = quest.location ? ` · 📍 ${quest.location}` : '';
+        return `<div class="char-quest ${done ? 'is-done' : ''}">
+            <b>${quest.title || 'Без названия'}</b>
+            <span class="char-quest-status">${status}${where}</span>
+            ${quest.description ? `<p>${quest.description}</p>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function charRelationshipRows() {
+    const rels = (currentPlayer && currentPlayer.relationships) || {};
+    const entries = Object.entries(rels);
+    if (!entries.length) {
+        return '<div class="char-empty">Пока ни с кем не сблизились.</div>';
+    }
+    return entries
+        .sort((a, b) => (b[1].value || 0) - (a[1].value || 0))
+        .map(([name, info]) => {
+            const stage = REL_STAGES[info.stage || 0] || REL_STAGES[0];
+            return `<div class="char-derived-row"><span>${name}</span><b>${stage} · ${info.value || 0}</b></div>`;
+        })
+        .join('');
+}
+
+function renderCharModal() {
+    const body = document.getElementById('char-modal-body');
+    if (!body || !currentPlayer) return;
+
+    const p = currentPlayer;
+    const title = document.getElementById('char-modal-title');
+    if (title) title.innerText = p.name || 'Персонаж';
+
+    const genre = genreName(p.genre) || '—';
+    const genre2 = p.genre_secondary ? genreName(p.genre_secondary) : null;
+    const genreLabel = genre2 ? `${genre} · ${genre2}` : genre;
+
+    body.innerHTML = `
+        <div class="char-summary">
+            <div><span>Уровень</span><b>${p.level}</b></div>
+            <div><span>Жанр</span><b>${genreLabel}</b></div>
+            <div><span>HP</span><b>${p.hp} / ${p.max_hp}</b></div>
+            <div><span>Опыт</span><b>${p.xp} / ${p.next_level_xp}</b></div>
+            <div><span>Локация</span><b>${p.location || '—'}</b></div>
+        </div>
+
+        <h3 class="char-section">Характеристики
+            <small>доступно очков: ${p.stat_points || 0}</small>
+        </h3>
+        <div class="char-stat-list">${charStatRows()}</div>
+
+        <h3 class="char-section">Боевые показатели</h3>
+        <div class="char-derived">${charDerivedRows()}</div>
+
+        <h3 class="char-section">Звание и репутация</h3>
+        <div class="char-derived">
+            <div class="char-derived-row"><span>Звание</span><b>${p.title || '—'}</b></div>
+            <div class="char-derived-row"><span>Фракция</span><b>${p.faction || '—'}</b></div>
+            <div class="char-derived-row"><span>Репутация</span><b>${p.reputation || 0}</b></div>
+        </div>
+
+        <h3 class="char-section">Квесты</h3>
+        <div class="char-quests">${charQuestRows()}</div>
+
+        <h3 class="char-section">Отношения</h3>
+        <div class="char-derived">${charRelationshipRows()}</div>
+    `;
 }
 
 // --- ЛОГИКА JRPG БОЯ ---
@@ -1421,12 +1581,14 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (confirmResolver) { closeConfirm(false); return; }
+    closeCharModal();
     hideItemTip();
 });
 
 // Тап по затемнённому фону закрывает окна (книг и подтверждения).
 document.addEventListener('click', (e) => {
     if (e.target && e.target.id === 'library-modal') closeLibraryModal();
+    if (e.target && e.target.id === 'char-modal') closeCharModal();
     if (e.target && e.target.id === 'confirm-modal') closeConfirm(false);
 });
 

@@ -12,6 +12,14 @@
     макс. HP за уровень          = HP_PER_LEVEL + vitality // HP_VITALITY_STEP
     стоимость +1 характеристики  = POINT_COST (1 очко)
     эффект +1 живучести          = +HP_PER_VITALITY к макс. HP и текущему HP
+
+Производные боевые значения (задача «характеристики реально влияют на бой»):
+    сила        -> атака (урон по врагу)
+    живучесть   -> запас HP и защита
+    интеллект   -> сила способностей
+    ловкость    -> уклонение (снижает получаемый урон) и инициатива (+к атаке)
+    восприятие  -> меткость (поднимает минимальный урон) и шанс крита
+    удача       -> шанс крита и добыча (шанс дополнительной находки)
 """
 
 STAT_KEYS = ("strength", "agility", "vitality", "intelligence", "perception", "luck")
@@ -51,6 +59,26 @@ HP_PER_VITALITY = 10             # +1 живучести = +10 макс. HP
 ATTACK_PER_STRENGTH = 2          # +1 силы = +2 к урону в бою
 MAGIC_PER_INTELLIGENCE = 2       # +1 интеллекта = +2 к силе способностей
 
+# ---------- производные боевые значения ----------
+# Ловкость: уклонение снижает получаемый урон, инициатива добавляет к атаке.
+DODGE_PER_AGILITY = 0.012        # +1 ловкости = +1,2% уклонения
+DODGE_MAX = 0.60                 # потолок уклонения
+INITIATIVE_PER_AGILITY = 0.5     # каждое очко ловкости = +0,5 к бонусу атаки
+
+# Восприятие и удача: шанс критического удара.
+CRIT_PER_PERCEPTION = 0.010      # +1 восприятия = +1% крита
+CRIT_PER_LUCK = 0.015            # +1 удачи = +1,5% крита
+CRIT_MAX = 0.75                  # потолок шанса крита
+CRIT_DAMAGE_BONUS = 0.5          # критический удар = +50% урона
+
+# Восприятие: меткость поднимает нижнюю границу урона ближе к верхней.
+ACCURACY_PER_PERCEPTION = 0.03   # +1 восприятия = +3% меткости
+ACCURACY_MAX = 0.60              # потолок меткости
+
+# Удача: шанс найти дополнительную добычу после победы в бою.
+LOOT_PER_LUCK = 0.02             # +1 удачи = +2% к шансу добычи
+LOOT_MAX = 0.60                  # потолок шанса добычи
+
 
 def xp_to_next(level: int) -> int:
     """Сколько опыта нужно, чтобы уйти с уровня `level` на следующий."""
@@ -82,6 +110,42 @@ def attack_power(strength: int) -> int:
 
 def magic_power(intelligence: int) -> int:
     return 3 + max(0, int(intelligence)) * MAGIC_PER_INTELLIGENCE
+
+
+# ---------- производные боевые значения ----------
+
+def _stat(player, key: str) -> int:
+    """Значение характеристики с запасным нулём (для простых заглушек в тестах)."""
+    return max(0, int(getattr(player, key, 0) or 0))
+
+
+def dodge_chance(player) -> float:
+    """Доля получаемого урона, которую персонаж уклоняет (0..DODGE_MAX)."""
+    return min(DODGE_MAX, _stat(player, "agility") * DODGE_PER_AGILITY)
+
+
+def initiative_bonus(player) -> int:
+    """Прибавка к атаке за инициативу (ловкость): персонаж бьёт быстрее и точнее."""
+    return int(round(_stat(player, "agility") * INITIATIVE_PER_AGILITY))
+
+
+def crit_chance(player) -> float:
+    """Шанс критического удара (0..CRIT_MAX) от восприятия и удачи."""
+    chance = (
+        _stat(player, "perception") * CRIT_PER_PERCEPTION
+        + _stat(player, "luck") * CRIT_PER_LUCK
+    )
+    return min(CRIT_MAX, chance)
+
+
+def accuracy(player) -> float:
+    """Меткость (0..ACCURACY_MAX): насколько близко минимальный урон подтянут к максимуму."""
+    return min(ACCURACY_MAX, _stat(player, "perception") * ACCURACY_PER_PERCEPTION)
+
+
+def loot_chance(player) -> float:
+    """Шанс дополнительной добычи после победы (0..LOOT_MAX) от удачи."""
+    return min(LOOT_MAX, _stat(player, "luck") * LOOT_PER_LUCK)
 
 
 def apply_level_up(player) -> list:

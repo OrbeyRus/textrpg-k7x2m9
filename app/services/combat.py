@@ -4,12 +4,15 @@
 экипировка и жанр реально влияют на исход боя.
 
 Формулы:
-    атака игрока   = 4 + 2*сила + бонус оружия
-    урон по врагу  = зажимаем число LLM в [0.7*атака; атака]
+    атака игрока   = 4 + 2*сила + инициатива + бонус оружия
+    урон по врагу  = зажимаем число LLM в [0.7*атака; атака] + бонус крита
+    меткость       = восприятие поднимает нижнюю границу урона к верхней
     защита         = живучесть // 2 + бонус брони
+    уклонение      = ловкость снижает получаемый урон (доля)
     HP врага       = базовое * (1 + 0.2*(уровень-1)) * множитель жанра
     атака врага    = (4 + 2*min(HP врага // 10; 6) + 2*(уровень-1)) * множитель жанра
-    урон врага     = max(1, атака врага - защита // 2), но не больше доли макс. HP
+    урон врага     = max(1, атака врага - защита // 2) с учётом уклонения,
+                     но не больше доли макс. HP
 """
 
 from app.content import genres
@@ -100,13 +103,38 @@ def armor_bonus(player) -> int:
 
 def attack_power(player) -> int:
     strength = int(getattr(player, "strength", 0) or 0)
-    return progression.attack_power(strength) + weapon_bonus(player)
+    return (
+        progression.attack_power(strength)
+        + progression.initiative_bonus(player)
+        + weapon_bonus(player)
+    )
+
+
+def crit_chance(player) -> float:
+    """Шанс критического удара (восприятие + удача)."""
+    return progression.crit_chance(player)
+
+
+def crit_bonus(player, base: int) -> int:
+    """Средняя прибавка к урону от критических ударов."""
+    base = max(0, int(base))
+    return int(round(base * crit_chance(player) * progression.CRIT_DAMAGE_BONUS))
 
 
 def attack_range(player) -> tuple:
-    """Диапазон урона игрока по врагу: (минимум, максимум)."""
+    """Диапазон урона игрока по врагу: (минимум, максимум).
+
+    Меткость (восприятие) подтягивает нижнюю границу ближе к верхней — чем
+    выше меткость, тем реже проходят слабые удары. Критический урон считается
+    отдельной надбавкой в ``player_damage``.
+    """
     power = max(1, attack_power(player))
-    return max(1, round(power * 0.7)), power
+    low = max(1, round(power * 0.7))
+    high = power
+    acc = progression.accuracy(player)
+    if acc > 0 and high > low:
+        low = low + int(round((high - low) * acc))
+    return max(1, low), high
 
 
 def defense(player) -> int:
@@ -115,7 +143,11 @@ def defense(player) -> int:
 
 
 def player_damage(player, raw) -> int:
-    """Урон игрока по врагу: зажимаем число LLM в диапазон характеристик."""
+    """Урон игрока по врагу: зажимаем число LLM в диапазон характеристик.
+
+    Поверх зажатого значения добавляется средняя прибавка от критов — так
+    восприятие и удача реально повышают урон, не ломая диапазон атаки.
+    """
     try:
         value = abs(int(raw))
     except (TypeError, ValueError):
@@ -123,7 +155,8 @@ def player_damage(player, raw) -> int:
     if value <= 0:
         return 0
     low, high = attack_range(player)
-    return max(low, min(value, high))
+    base = max(low, min(value, high))
+    return base + crit_bonus(player, base)
 
 
 def scale_enemy_hp(player, base_hp) -> int:
@@ -156,11 +189,37 @@ def enemy_attack(player, enemy_max_hp=0) -> int:
 def incoming_damage(player, enemy_max_hp=0) -> int:
     """Урон врага по игроку: сервер задаёт силу удара, защита его снижает.
 
-    Дополнительно удар ограничен долей макс. HP игрока (``MAX_HIT_FRACTION``),
-    чтобы один выпад не сносил слишком много здоровья.
+    Ловкость даёт уклонение: доля удара уходит в «промах», поэтому получаемый
+    урон падает. Дополнительно удар ограничен долей макс. HP игрока
+    (``MAX_HIT_FRACTION``), чтобы один выпад не сносил слишком много здоровья.
     """
     damage = max(1, enemy_attack(player, enemy_max_hp) - defense(player) // 2)
+    dodge = progression.dodge_chance(player)
+    if dodge > 0:
+        damage = max(1, int(round(damage * (1 - dodge))))
     max_hp = int(getattr(player, "max_hp", 0) or 0)
     if max_hp > 0:
         damage = min(damage, max(1, round(max_hp * MAX_HIT_FRACTION)))
     return damage
+
+
+def derived_stats(player) -> dict:
+    """Производные боевые значения для окна персонажа."""
+    power = attack_power(player)
+    low, high = attack_range(player)
+    return {
+        "attack": power,
+        "attack_min": low + crit_bonus(player, low),
+        "attack_max": high + crit_bonus(player, high),
+        "defense": defense(player),
+        "max_hp": int(getattr(player, "max_hp", 0) or 0),
+        "magic_power": progression.magic_power(
+            int(getattr(player, "intelligence", 0) or 0)
+        ),
+        "crit_chance": round(crit_chance(player) * 100, 1),
+        "crit_bonus": int(round(progression.CRIT_DAMAGE_BONUS * 100)),
+        "dodge_chance": round(progression.dodge_chance(player) * 100, 1),
+        "accuracy": round(progression.accuracy(player) * 100, 1),
+        "initiative": progression.initiative_bonus(player),
+        "loot_chance": round(progression.loot_chance(player) * 100, 1),
+    }

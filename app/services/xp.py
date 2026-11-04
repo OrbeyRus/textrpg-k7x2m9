@@ -5,6 +5,7 @@ LLM описывает, что произошло, тегом [EVENT], а сер
 """
 
 from app.content import genres
+from app.services import loot
 
 BASE_XP = 10          # опыт за обычное событие на 1 уровне
 LEVEL_STEP = 3        # прибавка за каждый уровень игрока
@@ -135,6 +136,15 @@ def award_events(player, events: list, context: dict | None = None) -> tuple:
             total += bonus
             if bonus_line:
                 lines.append(bonus_line)
+
+        # Удача: после победы можно найти что-то полезное сверх сюжетного.
+        if event_type == "combat_win" and result != "fail":
+            found = loot.roll(player)
+            if found:
+                inventory = list(player.inventory or [])
+                inventory.append(found)
+                player.inventory = inventory
+                lines.append(f"🎁 Добыча: {found}")
 
     ledger[scene_key] = {"count": scene_count, "turn": turn}
     player.xp_ledger = ledger

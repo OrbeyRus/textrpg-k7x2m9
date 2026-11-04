@@ -90,6 +90,30 @@ def test_log_export_works_with_cyrillic_name():
         session.close()
 
 
+def test_player_state_includes_derived_stats():
+    from app import database
+
+    created = client.post(
+        "/player/", json={"user_token": "test-derived", "name": "Производные"}
+    )
+    assert created.status_code == 200
+    player_id = created.json()["id"]
+    try:
+        response = client.get(f"/player/{player_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert "title" in data and "faction" in data and "reputation" in data
+        derived = data["derived"]
+        for key in ("attack_min", "attack_max", "defense", "crit_chance", "dodge_chance"):
+            assert key in derived
+        assert derived["attack_min"] <= derived["attack_max"]
+    finally:
+        session = database.SessionLocal()
+        session.query(database.Player).filter(database.Player.id == player_id).delete()
+        session.commit()
+        session.close()
+
+
 def test_settings_endpoint_lists_providers_without_keys():
     response = client.get("/settings")
     assert response.status_code == 200

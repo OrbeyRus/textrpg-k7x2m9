@@ -677,7 +677,7 @@ class MainActivity : Activity() {
 
         // Версия веб-ассетов: меняйте при правках вёрстки/CSS, чтобы WebView
         // не использовал закэшированную страницу.
-        private const val ASSET_VERSION = 10
+        private const val ASSET_VERSION = 11
 
         // Адрес сервера, чтобы не поднимать его повторно после пересоздания Activity.
         @Volatile

@@ -148,6 +148,7 @@ h2::after {
 }
 .menu-btn:active { transform: translateY(1px); }
 .menu-btn-quest { border-color: rgba(76, 175, 80, 0.45); }
+.menu-btn-hero { border-color: rgba(120, 156, 224, 0.45); }
 .menu-btn-book { color: var(--gold-soft); border-color: rgba(224, 176, 80, 0.4); }
 
 /* ---------- характеристики ---------- */

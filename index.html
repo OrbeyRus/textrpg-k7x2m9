@@ -9,8 +9,8 @@
     <link rel="preload" href="/static/fonts/ruslan-display-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/static/fonts/fonts.css?v=1">
     <link rel="stylesheet" href="/static/css/base.css?v=7">
-    <link rel="stylesheet" href="/static/css/layout.css?v=7">
-    <link rel="stylesheet" href="/static/css/components.css?v=21">
+    <link rel="stylesheet" href="/static/css/layout.css?v=8">
+    <link rel="stylesheet" href="/static/css/components.css?v=22">
 </head>
 <body>
 
@@ -64,6 +64,10 @@
                 <div class="char-row"><span>Уровень</span><b id="c-level"></b></div>
                 <div class="char-row"><span>Жанр</span><b id="c-genre">—</b></div>
             </div>
+
+            <button class="menu-btn menu-btn-hero" onclick="openCharModal()">
+                <span class="ico">🧙</span> Персонаж
+            </button>
 
             <button class="menu-btn menu-btn-quest" onclick="openQuests()">
                 <span class="ico">📜</span> Журнал квестов
@@ -186,6 +190,17 @@
                 <button class="icon-btn" onclick="closeQuests()" aria-label="Закрыть">&times;</button>
             </div>
             <div id="quest-list-container"></div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ПЕРСОНАЖА -->
+    <div id="char-modal" class="overlay quest-overlay" style="display: none;">
+        <div class="quest-card char-card">
+            <div class="quest-head">
+                <h2 id="char-modal-title">Персонаж</h2>
+                <button class="icon-btn" onclick="closeCharModal()" aria-label="Закрыть">&times;</button>
+            </div>
+            <div id="char-modal-body"></div>
         </div>
     </div>
 
@@ -320,6 +335,6 @@
         <div class="item-tip-actions" id="item-tip-actions"></div>
     </div>
 
-    <script src="/static/js/app.js?v=17"></script>
+    <script src="/static/js/app.js?v=18"></script>
 </body>
 </html>

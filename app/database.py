@@ -51,6 +51,11 @@ class Player(Base):
     genre_secondary = Column(String, default="")
     genre_weights = Column(JSON, default=dict)
 
+    # Звание, фракция и репутация — заполняются по сюжету (теги REPUTATION/TITLE/FACTION)
+    reputation = Column(Integer, default=0)
+    title = Column(String, default="")
+    faction = Column(String, default="")
+
     # События, отношения и способности
     relationships = Column(JSON, default=dict)
     xp_ledger = Column(JSON, default=dict)
@@ -91,7 +96,12 @@ def _ensure_columns() -> None:
         return
 
     existing = {column["name"] for column in inspector.get_columns("players")}
-    additions = {"item_notes": "JSON"}
+    additions = {
+        "item_notes": "JSON",
+        "reputation": "INTEGER DEFAULT 0",
+        "title": "VARCHAR DEFAULT ''",
+        "faction": "VARCHAR DEFAULT ''",
+    }
 
     with engine.begin() as connection:
         for name, ddl in additions.items():
