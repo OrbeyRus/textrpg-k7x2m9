@@ -781,10 +781,12 @@
     white-space: pre-line;
 }
 
-.confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-/* width:auto перебивает мобильное `.btn-action { width:100% }`, иначе кнопка
-   «Продолжить» растягивалась и выдавливала «Отмена» за край экрана. */
-.confirm-actions .btn-action { flex: 0 0 auto; width: auto; min-width: 108px; }
+.confirm-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+/* Кнопки делят строку поровну и растягиваются по ширине карточки: отступы
+   слева и справа одинаковые (раньше обе прижимались вправо, и «Отмена»
+   казалась далеко от левой границы). */
+.confirm-actions .btn-action { flex: 1 1 0; width: auto; min-width: 0; }
+.confirm-actions .btn-action:only-child { flex: 0 1 auto; min-width: 140px; }
 .btn-danger {
     border-color: rgba(255, 90, 70, 0.6);
     background: rgba(255, 90, 70, 0.16);
@@ -1053,13 +1055,6 @@
     .top-bar-actions {
         justify-content: center;
         width: 100%;
-    }
-    /* На телефоне кнопки подтверждения ужимаем по горизонтали, чтобы
-       «Отмена» и основное действие стояли в один ряд, а не столбиком. */
-    .confirm-actions .btn-action {
-        padding-left: 16px;
-        padding-right: 16px;
-        min-width: 0;
     }
 }
 
