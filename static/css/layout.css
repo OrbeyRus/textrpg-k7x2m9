@@ -233,7 +233,13 @@ h2::after {
 /* ---------- центральная колонка ---------- */
 .center-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
-.top-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.top-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px 16px;
+}
 
 h1 {
     margin: 0;
@@ -248,8 +254,14 @@ h1 {
 .btn-reset {
     position: relative;
     overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 44px;
     padding: 7px 16px;
     font-size: 0.95rem;
+    line-height: 1.1;
     font-family: var(--font-body);
     letter-spacing: 0.06em;
     color: var(--text-dim);

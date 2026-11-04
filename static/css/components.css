@@ -573,7 +573,12 @@
     .btn-action { width: 100%; }
     .onboarding-card { padding: 28px 20px; }
     .provider-list { grid-template-columns: 1fr; }
-    .top-bar { flex-wrap: wrap; }
+    /* Верхняя панель: заголовок сверху, кнопки по центру ровным рядом. */
+    .top-bar {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
 }
 
 /* ---------- выбор жанра ---------- */
@@ -763,6 +768,10 @@
     font-size: 1.12rem;
     color: var(--gold);
 }
+/* В окнах-шапках «✦» из общего стиля h2 лишняя. */
+.confirm-title::after,
+.quest-head h2::after,
+.menu-head h2::after { content: none; }
 
 .confirm-message {
     margin: 0 0 20px;
@@ -772,8 +781,10 @@
     white-space: pre-line;
 }
 
-.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
-.confirm-actions .btn-action { flex: 0 0 auto; min-width: 100px; }
+.confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+/* width:auto перебивает мобильное `.btn-action { width:100% }`, иначе кнопка
+   «Продолжить» растягивалась и выдавливала «Отмена» за край экрана. */
+.confirm-actions .btn-action { flex: 0 0 auto; width: auto; min-width: 108px; }
 .btn-danger {
     border-color: rgba(255, 90, 70, 0.6);
     background: rgba(255, 90, 70, 0.16);
@@ -1006,12 +1017,26 @@
 }
 
 /* ---------- кнопка меню и баннер обновления ---------- */
-.top-bar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.top-bar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    /* stretch выравнивает кнопки по высоте (эмодзи в «Сменить книгу» делает
+       строку выше — иначе кнопки выглядели разнокалиберными). */
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 8px;
+}
 
 .btn-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: 44px;
     padding: 8px 14px;
     font-family: inherit;
     font-size: 0.95rem;
+    line-height: 1.1;
     color: var(--text);
     background: rgba(224, 176, 80, 0.1);
     border: 1px solid rgba(224, 176, 80, 0.4);
@@ -1020,6 +1045,23 @@
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 .btn-menu:hover { background: rgba(224, 176, 80, 0.2); border-color: var(--gold); }
+
+/* На телефоне кнопки верхней панели — по центру ровным рядом.
+   Правило стоит после базового `.top-bar-actions`, иначе базовое
+   `justify-content: flex-end` перебивает медиа-запрос. */
+@media (max-width: 560px) {
+    .top-bar-actions {
+        justify-content: center;
+        width: 100%;
+    }
+    /* На телефоне кнопки подтверждения ужимаем по горизонтали, чтобы
+       «Отмена» и основное действие стояли в один ряд, а не столбиком. */
+    .confirm-actions .btn-action {
+        padding-left: 16px;
+        padding-right: 16px;
+        min-width: 0;
+    }
+}
 
 .update-banner {
     display: flex;
@@ -1126,7 +1168,21 @@
 .menu-hint b { color: var(--gold-soft); }
 .menu-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .menu-actions .btn-action { flex: 1 1 auto; min-width: 120px; }
-.btn-ghost { background: transparent; border-color: var(--line); }
+.btn-ghost {
+    /* «Призрачная» кнопка: тёмный текст `.btn-action` на прозрачном фоне не
+       читался — делаем светлый текст и мягкую рамку. */
+    color: var(--gold-soft, #e6c884);
+    background: transparent;
+    border-color: rgba(224, 176, 80, 0.4);
+    box-shadow: none;
+}
+.btn-ghost:hover {
+    color: #fff;
+    border-color: var(--gold);
+    background: rgba(224, 176, 80, 0.12);
+    filter: none;
+    box-shadow: none;
+}
 .menu-status { min-height: 1em; font-size: 0.86rem; color: var(--text-dim); }
 .menu-status.is-ok { color: #8fd18f; }
 .menu-status.is-error { color: #ff9a8a; }
