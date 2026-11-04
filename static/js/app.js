@@ -1629,9 +1629,57 @@ function showBanner(text, actionLabel, action) {
     if (!banner) return;
     if (label) label.innerText = text;
     if (button && actionLabel) button.innerText = actionLabel;
+    resetUpdateProgress();
     bannerAction = action || null;
     banner.style.display = 'flex';
 }
+
+// --- прогресс скачивания обновления ---
+// Android-оболочка шлёт проценты сюда через evaluateJavascript, чтобы человек
+// видел, что скачивание идёт. На ПК эти функции просто не вызываются.
+function resetUpdateProgress() {
+    const bar = document.getElementById('update-progress');
+    const fill = document.getElementById('update-progress-fill');
+    const button = document.getElementById('update-banner-action');
+    if (bar) bar.style.display = 'none';
+    if (fill) fill.style.width = '0%';
+    if (button) button.disabled = false;
+}
+
+function textrpgUpdateProgress(percent) {
+    const bar = document.getElementById('update-progress');
+    const fill = document.getElementById('update-progress-fill');
+    const label = document.getElementById('update-banner-text');
+    if (bar) bar.style.display = 'block';
+    if (fill && percent >= 0) fill.style.width = Math.min(100, percent) + '%';
+    if (label) {
+        label.innerText = percent >= 0
+            ? `Скачивается обновление… ${percent}%`
+            : 'Скачивается обновление…';
+    }
+}
+
+function textrpgUpdateDone() {
+    const bar = document.getElementById('update-progress');
+    const fill = document.getElementById('update-progress-fill');
+    const label = document.getElementById('update-banner-text');
+    if (bar) bar.style.display = 'block';
+    if (fill) fill.style.width = '100%';
+    if (label) label.innerText = 'Загрузка завершена. Открываю установщик…';
+}
+
+function textrpgUpdateError() {
+    const bar = document.getElementById('update-progress');
+    const label = document.getElementById('update-banner-text');
+    const button = document.getElementById('update-banner-action');
+    if (bar) bar.style.display = 'none';
+    if (label) label.innerText = 'Не удалось скачать обновление. Попробуйте ещё раз.';
+    if (button) button.disabled = false;
+}
+
+window.textrpgUpdateProgress = textrpgUpdateProgress;
+window.textrpgUpdateDone = textrpgUpdateDone;
+window.textrpgUpdateError = textrpgUpdateError;
 
 function bannerPrimary() {
     if (bannerAction) bannerAction();
@@ -1654,6 +1702,12 @@ function dismissUpdate() {
 function installUpdate() {
     if (!updateInfo) return;
     if (ANDROID && updateInfo.asset_url) {
+        const button = document.getElementById('update-banner-action');
+        if (button) {
+            button.disabled = true;
+            button.innerText = 'Скачиваю…';
+        }
+        textrpgUpdateProgress(0);
         ANDROID.downloadAndInstall(updateInfo.asset_url);
         return;
     }

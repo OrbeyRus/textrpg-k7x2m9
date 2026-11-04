@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/static/fonts/fonts.css?v=1">
     <link rel="stylesheet" href="/static/css/base.css?v=7">
     <link rel="stylesheet" href="/static/css/layout.css?v=5">
-    <link rel="stylesheet" href="/static/css/components.css?v=13">
+    <link rel="stylesheet" href="/static/css/components.css?v=14">
 </head>
 <body>
 
@@ -100,7 +100,12 @@
             </div>
 
             <div id="update-banner" class="update-banner" style="display:none;">
-                <span id="update-banner-text"></span>
+                <div class="update-banner-main">
+                    <span id="update-banner-text"></span>
+                    <div class="update-progress" id="update-progress" style="display:none;">
+                        <div class="update-progress-fill" id="update-progress-fill"></div>
+                    </div>
+                </div>
                 <span class="update-banner-actions">
                     <button class="btn-mini" id="update-banner-action" onclick="bannerPrimary()">Обновить</button>
                     <button class="btn-mini btn-mini-ghost" onclick="dismissUpdate()">Позже</button>
@@ -294,6 +299,6 @@
         <div class="item-tip-actions" id="item-tip-actions"></div>
     </div>
 
-    <script src="/static/js/app.js?v=15"></script>
+    <script src="/static/js/app.js?v=16"></script>
 </body>
 </html>

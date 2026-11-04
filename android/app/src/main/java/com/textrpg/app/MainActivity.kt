@@ -1,9 +1,14 @@
 package com.textrpg.app
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -26,6 +31,8 @@ import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.FileProvider
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
@@ -423,13 +430,39 @@ class MainActivity : Activity() {
                     return@runOnUiThread
                 }
 
-                Toast.makeText(this@MainActivity, "Скачиваю обновление…", Toast.LENGTH_SHORT).show()
+                // Уведомление в трее: на Android 13+ спросим разрешение, если нужно.
+                if (!canNotify() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    try {
+                        requestPermissions(
+                            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                            REQUEST_NOTIFY
+                        )
+                    } catch (e: Exception) {
+                        // Без уведомления прогресс всё равно виден в игре.
+                    }
+                }
+                updateProgressToPage(0)
+                showUpdateNotification(0)
+
                 Thread {
                     try {
                         val apk = File(cacheDir, "update.apk")
-                        downloadFile(url, apk)
-                        runOnUiThread { installApk(apk) }
+                        downloadFile(url, apk) { done, total ->
+                            val percent =
+                                if (total > 0) ((done * 100) / total).toInt().coerceIn(0, 100)
+                                else -1
+                            updateProgressToPage(percent)
+                            showUpdateNotification(percent)
+                        }
+                        runOnUiThread {
+                            updateProgressToPage(100)
+                            notifyDone()
+                            clearUpdateNotification()
+                            installApk(apk)
+                        }
                     } catch (e: Exception) {
+                        clearUpdateNotification()
+                        notifyError()
                         toast("Не удалось скачать обновление: ${e.message}")
                     }
                 }.start()
@@ -465,7 +498,7 @@ class MainActivity : Activity() {
     }
 
     /** Скачивает файл, самостоятельно проходя перенаправления GitHub. */
-    private fun downloadFile(url: String, target: File) {
+    private fun downloadFile(url: String, target: File, onProgress: (Long, Long) -> Unit = { _, _ -> }) {
         var current = url
         var hops = 0
         while (true) {
@@ -493,11 +526,112 @@ class MainActivity : Activity() {
                 connection.disconnect()
                 throw Exception("HTTP $code")
             }
+            // Длина бывает неизвестна (чанками) — тогда сообщаем «сколько скачано».
+            val total = connection.contentLengthLong
             connection.inputStream.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    var done = 0L
+                    var lastPercent = -2
+                    var lastReported = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        output.write(buffer, 0, read)
+                        done += read
+                        val percent = if (total > 0) ((done * 100) / total).toInt() else -1
+                        // Не дёргаем интерфейс на каждый байт: раз в процент или 512 КБ.
+                        if (percent != lastPercent || done - lastReported >= 512 * 1024) {
+                            lastPercent = percent
+                            lastReported = done
+                            onProgress(done, total)
+                        }
+                    }
+                    onProgress(done, total)
+                }
             }
             connection.disconnect()
             return
+        }
+    }
+
+    /** Отправляет процент скачивания в веб-страницу (можно из фонового потока). */
+    private fun updateProgressToPage(percent: Int) {
+        if (!this::webView.isInitialized) return
+        webView.post {
+            webView.evaluateJavascript(
+                "window.textrpgUpdateProgress && window.textrpgUpdateProgress($percent)",
+                null
+            )
+        }
+    }
+
+    /** Сообщает странице, что загрузка завершена и открывается установщик. */
+    private fun notifyDone() {
+        if (!this::webView.isInitialized) return
+        webView.post {
+            webView.evaluateJavascript(
+                "window.textrpgUpdateDone && window.textrpgUpdateDone()",
+                null
+            )
+        }
+    }
+
+    /** Сообщает странице об ошибке скачивания (кнопка снова активна). */
+    private fun notifyError() {
+        if (!this::webView.isInitialized) return
+        webView.post {
+            webView.evaluateJavascript(
+                "window.textrpgUpdateError && window.textrpgUpdateError()",
+                null
+            )
+        }
+    }
+
+    /** Есть ли разрешение показать уведомление (на Android 13+ его нужно спросить). */
+    private fun canNotify(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    /** Уведомление в трее с прогрессом скачивания обновления. */
+    @SuppressLint("MissingPermission")
+    private fun showUpdateNotification(percent: Int) {
+        if (!canNotify()) return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val manager = getSystemService(NotificationManager::class.java)
+                if (manager != null && manager.getNotificationChannel(NOTIF_CHANNEL) == null) {
+                    val channel = NotificationChannel(
+                        NOTIF_CHANNEL,
+                        "Обновление игры",
+                        NotificationManager.IMPORTANCE_LOW
+                    ).apply { description = "Загрузка обновления приложения" }
+                    manager.createNotificationChannel(channel)
+                }
+            }
+            val text = if (percent in 0..100) "Скачано $percent%" else "Скачивание…"
+            val notification = NotificationCompat.Builder(this, NOTIF_CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle("Обновление TextRPG")
+                .setContentText(text)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setProgress(100, percent.coerceIn(0, 100), percent < 0)
+                .build()
+            NotificationManagerCompat.from(this).notify(NOTIF_ID, notification)
+        } catch (e: Exception) {
+            // Уведомления не критичны: прогресс виден и в самой игре.
+        }
+    }
+
+    /** Убирает уведомление о загрузке. */
+    private fun clearUpdateNotification() {
+        try {
+            NotificationManagerCompat.from(this).cancel(NOTIF_ID)
+        } catch (e: Exception) {
+            // Уведомления могло не быть — это нормально.
         }
     }
 
@@ -535,10 +669,15 @@ class MainActivity : Activity() {
     companion object {
         private const val KEY_API = "proxy_api_key"
         private const val REQUEST_FILE = 1001
+        private const val REQUEST_NOTIFY = 1002
+
+        // Уведомление в трее с прогрессом скачивания обновления.
+        private const val NOTIF_CHANNEL = "textrpg_update"
+        private const val NOTIF_ID = 4201
 
         // Версия веб-ассетов: меняйте при правках вёрстки/CSS, чтобы WebView
         // не использовал закэшированную страницу.
-        private const val ASSET_VERSION = 6
+        private const val ASSET_VERSION = 7
 
         // Адрес сервера, чтобы не поднимать его повторно после пересоздания Activity.
         @Volatile

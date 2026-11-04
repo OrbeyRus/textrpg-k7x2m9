@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Установка скачанного обновления (Android покажет системное окно). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Прогресс скачивания обновления в трее (Android 13+ спросит разрешение). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name="com.chaquo.python.android.PyApplication"
