@@ -8,8 +8,8 @@
     урон по врагу  = зажимаем число LLM в [0.7*атака; атака]
     защита         = живучесть // 2 + бонус брони
     HP врага       = базовое * (1 + 0.2*(уровень-1)) * множитель жанра
-    атака врага    = (4 + 2*(HP врага // 10) + 2*(уровень-1)) * множитель жанра
-    урон врага     = max(1, атака врага - защита // 2)
+    атака врага    = (4 + 2*min(HP врага // 10; 6) + 2*(уровень-1)) * множитель жанра
+    урон врага     = max(1, атака врага - защита // 2), но не больше доли макс. HP
 """
 
 from app.content import genres
@@ -17,6 +17,14 @@ from app.services import progression
 
 # Жанровая интенсивность боёв (совпадает с combat_intensity профиля).
 INTENSITY_MULT = {"low": 0.7, "medium": 1.0, "high": 1.4}
+
+# Вклад HP врага в его урон ограничен: иначе крупный враг (а HP растёт с
+# уровнем) бил бы непропорционально сильно, и лечение не поспевало.
+ENEMY_HP_TERM_CAP = 6
+
+# Предел урона за один удар — доля макс. HP игрока. Чтобы даже «босс» не
+# сносил половину здоровья одним выпадом.
+MAX_HIT_FRACTION = 0.25
 
 # Бонус оружия по ключевому слову в названии (первое совпадение выигрывает).
 WEAPON_TIERS = (
@@ -130,16 +138,29 @@ def scale_enemy_hp(player, base_hp) -> int:
 
 
 def enemy_attack(player, enemy_max_hp=0) -> int:
-    """Сила удара врага по игроку."""
+    """Сила удара врага по игроку.
+
+    Вклад HP врага в урон ограничен (``ENEMY_HP_TERM_CAP``): без этого крупный
+    враг бил бы тем сильнее, чем больше у него здоровья, — а HP растёт с уровнем.
+    """
     try:
         max_hp = max(0, int(enemy_max_hp or 0))
     except (TypeError, ValueError):
         max_hp = 0
     level = max(1, int(getattr(player, "level", 1) or 1))
-    base = 4 + 2 * (max_hp // 10) + 2 * (level - 1)
+    hp_term = min(max_hp // 10, ENEMY_HP_TERM_CAP)
+    base = 4 + 2 * hp_term + 2 * (level - 1)
     return max(1, round(base * _intensity_for(player)))
 
 
 def incoming_damage(player, enemy_max_hp=0) -> int:
-    """Урон врага по игроку: сервер задаёт силу удара, защита его снижает."""
-    return max(1, enemy_attack(player, enemy_max_hp) - defense(player) // 2)
+    """Урон врага по игроку: сервер задаёт силу удара, защита его снижает.
+
+    Дополнительно удар ограничен долей макс. HP игрока (``MAX_HIT_FRACTION``),
+    чтобы один выпад не сносил слишком много здоровья.
+    """
+    damage = max(1, enemy_attack(player, enemy_max_hp) - defense(player) // 2)
+    max_hp = int(getattr(player, "max_hp", 0) or 0)
+    if max_hp > 0:
+        damage = min(damage, max(1, round(max_hp * MAX_HIT_FRACTION)))
+    return damage

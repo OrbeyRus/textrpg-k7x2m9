@@ -159,6 +159,18 @@ def test_field_heal_restores_hp():
     assert player.hp > 50
 
 
+def test_field_heal_at_full_health_reports_full():
+    player = DummyPlayer("romance")
+    player.hp = player.max_hp
+    abilities.learn(player, "support")
+    support = abilities.resolve(player, "support")
+
+    notes = abilities.apply_field_effect(player, support)
+
+    assert any("полное" in note for note in notes)
+    assert player.hp == player.max_hp
+
+
 def test_charm_field_effect_bumps_relationship():
     player = DummyPlayer("romance")
     abilities.learn(player, "warm_word")

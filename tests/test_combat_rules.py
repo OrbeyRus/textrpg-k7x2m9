@@ -124,3 +124,18 @@ def test_incoming_damage_never_below_one():
         equipment={"armor": "Стальные латы", "helmet": "Шлем"},
     )
     assert combat.incoming_damage(tank, 1) >= 1
+
+
+def test_enemy_attack_hp_term_is_capped():
+    # Очень «толстый» враг бьёт не сильнее, чем просто крупный.
+    big = combat.enemy_attack(DummyPlayer(level=1), 100)
+    bigger = combat.enemy_attack(DummyPlayer(level=1), 1000)
+    assert big == bigger
+
+
+def test_incoming_damage_capped_by_player_max_hp():
+    player = DummyPlayer(level=10)
+    player.max_hp = 100
+    player.hp = 100
+    damage = combat.incoming_damage(player, 500)
+    assert damage <= round(100 * combat.MAX_HIT_FRACTION)

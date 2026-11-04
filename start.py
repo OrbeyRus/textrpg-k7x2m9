@@ -28,6 +28,22 @@ HOST = "127.0.0.1"
 PORT = 8001
 APP = "main:app"
 
+
+def _force_utf8_console() -> None:
+    """Переводит вывод в UTF-8.
+
+    На Windows консоль по умолчанию бывает в cp1251/cp866, и вывод кириллицы
+    или эмодзи из логов падает с UnicodeEncodeError. Меняем кодировку потоков,
+    если интерпретатор это позволяет (в тестах и перенаправленном выводе —
+    молча пропускаем).
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None and hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8")
+        except (ValueError, OSError):
+            pass
+
 # Настройки ожидания готовности сервера.
 READY_TIMEOUT = 30.0   # сколько секунд ждать запуск
 POLL_INTERVAL = 0.15   # как часто проверять порт
@@ -53,6 +69,7 @@ def _open_browser_when_ready(url: str, host: str, port: int) -> None:
 
 
 def main() -> int:
+    _force_utf8_console()
     parser = argparse.ArgumentParser(
         description="Запуск сервера Text RPG и открытие игры в браузере."
     )

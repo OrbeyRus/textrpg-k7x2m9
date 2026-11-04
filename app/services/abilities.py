@@ -281,6 +281,21 @@ def set_status(player, key, value, turns=FIELD_DURATION) -> None:
     player.statuses = statuses
 
 
+def _apply_heal(player, value: int, notes: list) -> None:
+    """Восстанавливает HP и добавляет строку для интерфейса.
+
+    Если здоровье уже полное, не пишем «Восстановлено 0 HP» — это выглядело как
+    сбой, хотя лечение просто нечего было восполнять.
+    """
+    missing = max(0, player.max_hp - player.hp)
+    if missing <= 0:
+        notes.append("❤️ Здоровье и так полное")
+        return
+    amount = min(int(value), missing)
+    player.hp = min(player.max_hp, player.hp + amount)
+    notes.append(f"❤️ Восстановлено {amount} HP")
+
+
 # ---------- применение эффектов ----------
 
 def apply_field_effect(player, ability, target: str = "") -> list:
@@ -290,9 +305,7 @@ def apply_field_effect(player, ability, target: str = "") -> list:
     notes = []
 
     if effect == "heal":
-        amount = min(value, max(0, player.max_hp - player.hp))
-        player.hp = min(player.max_hp, player.hp + value)
-        notes.append(f"❤️ Восстановлено {amount} HP")
+        _apply_heal(player, value, notes)
     elif effect == "charm":
         if target:
             bonus, line = xp.bump_relationship(player, target, _tier(ability))
@@ -331,9 +344,7 @@ def apply_combat_effect(player, ability) -> tuple:
         else:
             player.enemy = enemy
     elif effect == "heal":
-        amount = min(value, max(0, player.max_hp - player.hp))
-        player.hp = min(player.max_hp, player.hp + value)
-        notes.append(f"❤️ Восстановлено {amount} HP")
+        _apply_heal(player, value, notes)
     elif effect == "guard":
         set_status(player, "guard", value)
         notes.append(f"🛡️ Щит: поглощает до {value} урона ({FIELD_DURATION} хода)")

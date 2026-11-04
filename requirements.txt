@@ -1,9 +1,20 @@
+# Ядро сервера.
 fastapi
 uvicorn
 sqlalchemy
+
+# Обязательно для форм FastAPI (загрузка книг): без python-multipart
+# загрузка падает с RuntimeError «python-multipart is not installed».
 python-multipart
+
+# HTTP-запросы к LLM и к GitHub (обновления).
 requests
+
+# RAG на десктопе: эмбеддинги считает локальная Ollama (на Android не нужно).
 numpy
 ollama
+
+# Тесты. httpx обязателен для Starlette TestClient (fastapi.testclient):
+# без него тесты не запускаются с RuntimeError.
 pytest
 httpx
