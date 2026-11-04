@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app import database
-from app.content import genres
+from app.content import genres, library
 from app.dependencies import get_db
+from app.schemas import LibraryOpen
 from app.services import campaign, gamelog, rag
 
 router = APIRouter(tags=["books"])
@@ -13,6 +14,58 @@ router = APIRouter(tags=["books"])
 def list_genres():
     """Список жанров для выбора при загрузке книги."""
     return {"genres": genres.public_list()}
+
+
+@router.get("/library")
+def list_library():
+    """Готовые книги, которые можно открыть без загрузки файла."""
+    return {"books": library.public_list()}
+
+
+@router.post("/library/{player_id}/open")
+async def open_library_book(
+    player_id: int,
+    payload: LibraryOpen,
+    db: Session = Depends(get_db),
+):
+    """Начинает кампанию по встроенной книге (текст берётся из приложения)."""
+    book = library.get(payload.book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="Книга не найдена")
+
+    text = library.load_text(payload.book_id)
+    if not text or not text.strip():
+        raise HTTPException(status_code=500, detail="Текст книги недоступен")
+
+    result = await rag.process_book_text(text, player_id, db)
+
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player:
+        raise HTTPException(status_code=404, detail="Игрок не найден")
+
+    profile = campaign.start_new_campaign(db_player, book["genre"])
+    db.commit()
+
+    gamelog.log_note(
+        db_player,
+        "book",
+        f"Открыта встроенная книга «{book['title']}» ({book['author']}), "
+        f"жанр: {profile['display_name']}",
+    )
+
+    return {
+        **result,
+        "book": {
+            "id": book["id"],
+            "title": book["title"],
+            "author": book["author"],
+        },
+        "genre": {
+            "code": profile["code"],
+            "secondary": profile["secondary"],
+            "display_name": profile["display_name"],
+        },
+    }
 
 
 @router.get("/book_status")

@@ -16,6 +16,10 @@ class NewGameRequest(BaseModel):
     user_token: str = ""
 
 
+class LibraryOpen(BaseModel):
+    book_id: str
+
+
 class StatUpgrade(BaseModel):
     stat_name: str
 

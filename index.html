@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/static/fonts/fonts.css?v=1">
     <link rel="stylesheet" href="/static/css/base.css?v=7">
     <link rel="stylesheet" href="/static/css/layout.css?v=5">
-    <link rel="stylesheet" href="/static/css/components.css?v=12">
+    <link rel="stylesheet" href="/static/css/components.css?v=13">
 </head>
 <body>
 
@@ -35,13 +35,19 @@
 
             <div id="step-book" class="step" style="display: none;">
                 <p class="step-ok">✓ Герой создан</p>
-                <p class="step-label">Шаг 2. Выберите жанр книги</p>
+                <p class="step-label">Шаг 2. Выберите готовую историю</p>
+                <p class="step-hint">Классика в общественном достоянии — играть можно сразу, ничего не загружая.</p>
+                <div id="library-grid" class="library-grid"></div>
+                <div id="library-progress" class="book-progress" style="display: none;"></div>
+
+                <p class="step-label" style="margin-top: 22px;">…или загрузите свою книгу</p>
+                <p class="step-label">Жанр книги</p>
                 <div id="genre-grid" class="genre-grid"></div>
 
                 <p class="step-label">Дополнительный тон — необязательно</p>
                 <div id="genre-secondary-grid" class="genre-grid genre-grid-secondary"></div>
 
-                <p class="step-label">Шаг 3. Загрузите книгу в формате .TXT, по лору которой хотите играть.</p>
+                <p class="step-label">Файл книги в формате .TXT</p>
                 <input type="file" id="book-file" accept=".txt" hidden onchange="uploadBook()">
                 <button id="book-pick-btn" class="btn-action btn-block" disabled onclick="document.getElementById('book-file').click()">Сначала выберите жанр</button>
                 <div id="book-progress" class="book-progress" style="display: none;">Обработка книги… Это займёт пару минут. Пожалуйста, подождите.</div>
@@ -288,6 +294,6 @@
         <div class="item-tip-actions" id="item-tip-actions"></div>
     </div>
 
-    <script src="/static/js/app.js?v=14"></script>
+    <script src="/static/js/app.js?v=15"></script>
 </body>
 </html>

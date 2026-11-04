@@ -270,13 +270,15 @@ def get_relevant_context(book_data, query, top_k=1, max_chars=2500):
         return "Информация о мире недоступна."
     return "\n\n".join(chosen)[:max_chars]
 
-async def process_book_upload(file: UploadFile, player_id: int, db):
-    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
-    if not db_player: raise HTTPException(status_code=404, detail="Игрок не найден")
+async def _store_book_text(text: str, player_id: int, db) -> dict:
+    """Готовит книгу из уже прочитанного текста и сохраняет куски для поиска.
 
-    filename = file.filename or ""
-    if not filename.lower().endswith('.txt'):
-        raise HTTPException(status_code=400, detail="Только .txt файлы")
+    Общий путь и для загруженного файла, и для встроенной книги: чтобы оба
+    источника обрабатывались одинаково (нарезка, эмбеддинги, прогресс).
+    """
+    db_player = db.query(database.Player).filter(database.Player.id == player_id).first()
+    if not db_player:
+        raise HTTPException(status_code=404, detail="Игрок не найден")
 
     book_filename = f"book_{player_id}.json"
     book_path = BOOKS_DIR / book_filename
@@ -285,12 +287,8 @@ async def process_book_upload(file: UploadFile, player_id: int, db):
     # а поиск идёт по словам (BM25).
     use_embeddings = embeddings.available()
 
-    _set_progress(player_id, stage="reading", done=0, total=0, percent=2, error=None)
+    _set_progress(player_id, stage="splitting", done=0, total=0, percent=5, error=None)
     try:
-        content = await file.read()
-        text = content.decode('utf-8', errors='ignore')
-        _set_progress(player_id, stage="splitting", percent=5)
-
         # Нарезка и эмбеддинги — в отдельном потоке, чтобы не блокировать
         # event loop: иначе на телефоне встаёт и интерфейс, и опрос прогресса.
         new_book_data = await run_in_threadpool(_build_book_data, text, player_id, use_embeddings)
@@ -313,3 +311,20 @@ async def process_book_upload(file: UploadFile, player_id: int, db):
             print(f"КРИТИЧЕСКАЯ ОШИБКА: {e}")
         _set_progress(player_id, stage="error", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def process_book_text(text: str, player_id: int, db) -> dict:
+    """Обрабатывает готовый текст (например, встроенную книгу из каталога)."""
+    _set_progress(player_id, stage="reading", done=0, total=0, percent=2, error=None)
+    return await _store_book_text(text, player_id, db)
+
+
+async def process_book_upload(file: UploadFile, player_id: int, db):
+    filename = file.filename or ""
+    if not filename.lower().endswith('.txt'):
+        raise HTTPException(status_code=400, detail="Только .txt файлы")
+
+    _set_progress(player_id, stage="reading", done=0, total=0, percent=2, error=None)
+    content = await file.read()
+    text = content.decode('utf-8', errors='ignore')
+    return await _store_book_text(text, player_id, db)

@@ -2,6 +2,7 @@ let currentPlayer = null;
 let playerId = localStorage.getItem('rpg_player_id');
 let abilitiesCache = [];
 let genresCache = [];
+let libraryCache = [];
 let selectedGenre = null;
 let selectedSecondary = null;
 
@@ -29,6 +30,7 @@ async function loadGenres() {
         const data = await response.json();
         genresCache = data.genres || [];
         renderGenreGrids();
+        renderLibraryGrid();
     } catch (e) {
         console.error('Не удалось загрузить жанры:', e);
     }
@@ -174,6 +176,119 @@ async function startNewGame() {
     } catch (e) {
         alert(`Ошибка: ${e.message}`);
     }
+}
+
+// --- ГОТОВЫЕ КНИГИ (БИБЛИОТЕКА) ---
+// Встроенные произведения в общественном достоянии: играть можно сразу, без
+// загрузки файла. Текст живёт внутри приложения, кнопка лишь запускает обработку.
+async function loadLibrary() {
+    try {
+        const response = await fetch('/library');
+        if (!response.ok) throw new Error(`код ${response.status}`);
+        const data = await response.json();
+        libraryCache = data.books || [];
+        renderLibraryGrid();
+    } catch (e) {
+        console.error('Не удалось загрузить список книг:', e);
+    }
+}
+
+function renderLibraryGrid() {
+    const grid = document.getElementById('library-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    if (!libraryCache.length) {
+        grid.innerHTML = '<div class="library-empty">Список книг пуст.</div>';
+        return;
+    }
+
+    libraryCache.forEach(book => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'library-card';
+        const genre = genreName(book.genre);
+        card.innerHTML =
+            `<b>${book.title}</b>` +
+            `<span class="library-author">${book.author}${book.year ? ', ' + book.year : ''}</span>` +
+            `<span class="library-desc">${book.description || ''}</span>` +
+            (genre ? `<span class="library-genre">${genre}</span>` : '');
+        card.onclick = () => openLibraryBook(book.id, card);
+        grid.appendChild(card);
+    });
+}
+
+async function openLibraryBook(bookId, card) {
+    if (!playerId) {
+        alert('Сначала создайте героя.');
+        return;
+    }
+    if (!confirm('Начать новую историю по этой книге?\nТекущая сессия будет сохранена.')) {
+        return;
+    }
+
+    const progressEl = document.getElementById('library-progress');
+    const cards = document.querySelectorAll('#library-grid .library-card');
+    cards.forEach(btn => { btn.disabled = true; });
+    if (card) card.classList.add('is-loading');
+    progressEl.style.display = 'block';
+
+    const startedAt = Date.now();
+    let lastPercent = -1;
+    let lastStage = 'reading';
+
+    function paint() {
+        const seconds = Math.round((Date.now() - startedAt) / 1000);
+        const label = UPLOAD_STAGES[lastStage] || 'Обработка книги…';
+        let text = label;
+        if (lastPercent >= 0) text += ` ${lastPercent}%`;
+        text += `\nПрошло ${seconds} с`;
+        progressEl.innerText = text;
+    }
+    paint();
+
+    const timer = setInterval(async () => {
+        paint();
+        try {
+            const response = await fetch(`/upload_progress/${playerId}`);
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data.percent != null) {
+                lastPercent = data.percent;
+                lastStage = data.stage || lastStage;
+                paint();
+            }
+        } catch (e) {
+            // Сервер занят обработкой — ждём следующего опроса.
+        }
+    }, 700);
+
+    try {
+        const response = await fetch(`/library/${playerId}/open`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({book_id: bookId})
+        });
+        clearInterval(timer);
+        if (response.ok) {
+            progressEl.innerText = 'Готово! Открываю…';
+            location.reload();
+            return;
+        }
+        let detail = '';
+        try {
+            const err = await response.json();
+            if (err.detail) detail = `\n${err.detail}`;
+        } catch (e) { /* ответ без JSON */ }
+        alert(`Не удалось открыть книгу (код ${response.status}).${detail}`);
+    } catch (e) {
+        clearInterval(timer);
+        alert('Ошибка сети при открытии книги: ' + e.message);
+    }
+
+    progressEl.style.display = 'none';
+    cards.forEach(btn => { btn.disabled = false; });
+    if (card) card.classList.remove('is-loading');
 }
 
 // --- ЗАГРУЗКА КНИГИ ---
@@ -1608,5 +1723,6 @@ async function initSettings() {
 
 // Запуск при открытии страницы
 loadGenres();
+loadLibrary();
 loadPlayer();
 initSettings();
